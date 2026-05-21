@@ -20,11 +20,13 @@ PROVIDER_OPENAI_COMPATIBLE = "OpenAI-Compatible"
 
 SUPPORTED_PROVIDERS = [
     PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
     PROVIDER_CLAUDE,
     PROVIDER_GEMINI,
     PROVIDER_DEEPSEEK,
-    PROVIDER_OPENAI_COMPATIBLE,
 ]
+AVAILABLE_PROVIDERS = [PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE]
+COMING_SOON_PROVIDERS = [PROVIDER_CLAUDE, PROVIDER_GEMINI, PROVIDER_DEEPSEEK]
 
 STATUS_NOT_CONFIGURED = "Not configured"
 STATUS_CONFIGURED = "Configured"
@@ -33,6 +35,7 @@ STATUS_FAILED = "Failed"
 STATUS_INVALID_KEY = "Invalid Key"
 STATUS_TIMEOUT = "Timeout"
 STATUS_NOT_SUPPORTED = "Not supported yet"
+STATUS_COMING_SOON = "Coming Soon"
 
 PROVIDER_MODELS = {
     PROVIDER_OPENAI: [
@@ -86,7 +89,10 @@ PROVIDER_KEY_PLACEHOLDERS = {
     PROVIDER_OPENAI_COMPATIBLE: "Provider API key (session only, never stored)",
 }
 
-COMING_SOON_MESSAGE = "Provider integration coming in next phase."
+COMING_SOON_MESSAGE = "This provider is listed for future support and cannot be used in CRM yet."
+CRM_PROVIDER_UNAVAILABLE_MESSAGE = (
+    "This provider is not available in this demo. Please use OpenAI or OpenAI-Compatible."
+)
 CONNECTION_REQUIRED_MESSAGE = "AI Provider is not connected. Please run Test Connection first."
 
 
@@ -123,6 +129,10 @@ def provider_requires_base_url(provider: str) -> bool:
 
 def is_provider_integrated(provider: str) -> bool:
     return provider in {PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE}
+
+
+def is_provider_available(provider: str) -> bool:
+    return provider in AVAILABLE_PROVIDERS
 
 
 def resolve_model(model: str, custom_model: str = "") -> str:
@@ -165,8 +175,8 @@ def test_connection(config: AIProviderConfig) -> ConnectionResult:
     validation_error = validate_config(config)
     if validation_error:
         return validation_error
-    if not is_provider_integrated(config.provider):
-        return ConnectionResult(STATUS_NOT_SUPPORTED, COMING_SOON_MESSAGE)
+    if not is_provider_available(config.provider):
+        return ConnectionResult(STATUS_COMING_SOON, COMING_SOON_MESSAGE)
 
     try:
         from openai import OpenAI
@@ -190,10 +200,10 @@ def test_connection(config: AIProviderConfig) -> ConnectionResult:
 
 
 def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: str) -> str:
+    if not is_provider_available(config.provider):
+        raise NotImplementedError(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
     if config.connection_status != STATUS_CONNECTED:
         raise RuntimeError(CONNECTION_REQUIRED_MESSAGE)
-    if not is_provider_integrated(config.provider):
-        raise NotImplementedError(COMING_SOON_MESSAGE)
 
     from openai import OpenAI
 
@@ -211,4 +221,3 @@ def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: s
         presence_penalty=0.2,
     )
     return response.choices[0].message.content or ""
-

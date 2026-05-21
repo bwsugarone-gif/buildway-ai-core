@@ -15,19 +15,24 @@ import streamlit as st
 
 from core.agents.provider_router import (
     AIProviderConfig,
+    AVAILABLE_PROVIDERS,
     COMING_SOON_MESSAGE,
+    COMING_SOON_PROVIDERS,
     CONNECTION_REQUIRED_MESSAGE,
+    CRM_PROVIDER_UNAVAILABLE_MESSAGE,
     PROVIDER_KEY_LABELS,
     PROVIDER_KEY_PLACEHOLDERS,
     PROVIDER_MODELS,
     PROVIDER_OPENAI,
     STATUS_CONFIGURED,
     STATUS_CONNECTED,
+    STATUS_COMING_SOON,
     STATUS_NOT_CONFIGURED,
     STATUS_NOT_SUPPORTED,
     SUPPORTED_PROVIDERS,
     generate_reply,
     get_default_model,
+    is_provider_available,
     mask_sensitive_text,
     provider_requires_base_url,
     resolve_model,
@@ -228,7 +233,9 @@ def _ensure_ai_state_defaults() -> None:
                 "custom_model": "",
                 "api_key": "",
                 "base_url": "",
-                "connection_status": STATUS_NOT_CONFIGURED,
+                "connection_status": STATUS_NOT_CONFIGURED
+                if is_provider_available(provider)
+                else STATUS_COMING_SOON,
             },
         )
 
@@ -266,16 +273,17 @@ def _sync_selected_ai_config(provider: str) -> AIProviderConfig:
 
 
 def _reset_provider_config(provider: str) -> None:
+    default_model = get_default_model(provider)
     st.session_state["ai_provider_configs"][provider] = {
         "provider": provider,
-        "model": get_default_model(provider),
+        "model": default_model,
         "custom_model": "",
-        "resolved_model": get_default_model(provider)
-        if get_default_model(provider) != "custom"
-        else "",
+        "resolved_model": default_model if default_model != "custom" else "",
         "api_key": "",
         "base_url": "",
-        "connection_status": STATUS_NOT_CONFIGURED,
+        "connection_status": STATUS_NOT_CONFIGURED
+        if is_provider_available(provider)
+        else STATUS_COMING_SOON,
     }
     _sync_selected_ai_config(provider)
 
@@ -417,6 +425,8 @@ elif page == L["nav_ai"]:
         "Client-owned API key is recommended to avoid mixed Token billing. "
         "Buildway-managed AI usage can be provided as a paid add-on."
     )
+    st.markdown(f"**Available Now:** {', '.join(AVAILABLE_PROVIDERS)}")
+    st.markdown(f"**Coming Soon:** {', '.join(COMING_SOON_PROVIDERS)}")
 
     # Provider selection (outside form so model list updates immediately)
     current_provider = st.session_state.get("ai_provider", PROVIDER_OPENAI)
@@ -438,12 +448,16 @@ elif page == L["nav_ai"]:
     raw_provider_config = st.session_state["ai_provider_configs"][provider]
     provider_models = PROVIDER_MODELS[provider]
     stored_model = raw_provider_config.get("model", get_default_model(provider))
+    provider_available = is_provider_available(provider)
+    if not provider_available:
+        st.info(COMING_SOON_MESSAGE)
 
     with st.form("ai_model_form"):
         model_name = st.selectbox(
             L["model_name"],
             provider_models,
             index=provider_models.index(stored_model) if stored_model in provider_models else 0,
+            disabled=not provider_available,
         )
         custom_model_name = ""
         if model_name == "custom":
@@ -451,6 +465,7 @@ elif page == L["nav_ai"]:
                 "Custom Model Name",
                 value=raw_provider_config.get("custom_model", ""),
                 placeholder="Enter model name",
+                disabled=not provider_available,
             )
         base_url_input = ""
         if provider_requires_base_url(provider):
@@ -463,10 +478,11 @@ elif page == L["nav_ai"]:
             PROVIDER_KEY_LABELS[provider],
             type="password",
             placeholder=PROVIDER_KEY_PLACEHOLDERS[provider],
+            disabled=not provider_available,
         )
 
-        save_ai = st.form_submit_button(L["save_ai"])
-        test_ai = st.form_submit_button("Test Connection")
+        save_ai = st.form_submit_button(L["save_ai"], disabled=not provider_available)
+        test_ai = st.form_submit_button("Test Connection", disabled=not provider_available)
 
     next_api_key = api_key_input or provider_config.api_key
     next_base_url = base_url_input if provider_requires_base_url(provider) else ""
@@ -503,7 +519,7 @@ elif page == L["nav_ai"]:
             st.success(result.message)
         elif result.status == STATUS_NOT_CONFIGURED:
             st.error(result.message)
-        elif result.status == STATUS_NOT_SUPPORTED:
+        elif result.status in {STATUS_COMING_SOON, STATUS_NOT_SUPPORTED}:
             st.info(result.message)
         else:
             st.error(result.message)
@@ -707,8 +723,8 @@ elif page == L["nav_crm"]:
             f"AI Provider connected: **{st.session_state.get('ai_provider')}** — "
             f"`{selected_config.model}`"
         )
-    elif selected_config.connection_status == STATUS_NOT_SUPPORTED:
-        st.info(COMING_SOON_MESSAGE)
+    elif selected_config.connection_status in {STATUS_COMING_SOON, STATUS_NOT_SUPPORTED}:
+        st.info(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
     elif selected_config.connection_status == STATUS_NOT_CONFIGURED:
         st.warning("No AI model configured. Please complete AI Model Setup first.")
     else:
@@ -762,10 +778,10 @@ elif page == L["nav_crm"]:
                             st.error("AI returned an empty response. Please try again.")
                     except Exception as e:
                         st.error(_format_ai_api_error(e))
-            elif selected_config.connection_status == STATUS_NOT_SUPPORTED:
+            elif selected_config.connection_status in {STATUS_COMING_SOON, STATUS_NOT_SUPPORTED}:
                 st.session_state["crm_reply"] = ""
                 st.session_state["crm_reply_source"] = ""
-                st.info(COMING_SOON_MESSAGE)
+                st.info(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
             else:
                 st.session_state["crm_reply"] = ""
                 st.session_state["crm_reply_source"] = ""

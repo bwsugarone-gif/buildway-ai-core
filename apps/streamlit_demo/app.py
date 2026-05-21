@@ -13,18 +13,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 
-from core.ai.provider_router import (
+from core.agents.provider_router import (
     AIProviderConfig,
     COMING_SOON_MESSAGE,
+    CONNECTION_REQUIRED_MESSAGE,
     PROVIDER_KEY_LABELS,
     PROVIDER_KEY_PLACEHOLDERS,
     PROVIDER_MODELS,
     PROVIDER_OPENAI,
+    STATUS_CONFIGURED,
+    STATUS_CONNECTED,
+    STATUS_NOT_CONFIGURED,
+    STATUS_NOT_SUPPORTED,
     SUPPORTED_PROVIDERS,
     generate_reply,
     get_default_model,
-    is_provider_integrated,
+    mask_sensitive_text,
     provider_requires_base_url,
+    resolve_model,
+    test_connection,
 )
 
 st.set_page_config(
@@ -218,8 +225,10 @@ def _ensure_ai_state_defaults() -> None:
             {
                 "provider": provider,
                 "model": get_default_model(provider),
+                "custom_model": "",
                 "api_key": "",
                 "base_url": "",
+                "connection_status": STATUS_NOT_CONFIGURED,
             },
         )
 
@@ -234,9 +243,14 @@ def _get_provider_config(provider: str) -> AIProviderConfig:
     raw_config = st.session_state["ai_provider_configs"][provider]
     return AIProviderConfig(
         provider=provider,
-        model=raw_config.get("model") or get_default_model(provider),
+        model=raw_config.get("resolved_model")
+        or resolve_model(
+            raw_config.get("model") or get_default_model(provider),
+            raw_config.get("custom_model", ""),
+        ),
         api_key=raw_config.get("api_key", ""),
         base_url=raw_config.get("base_url", ""),
+        connection_status=raw_config.get("connection_status", STATUS_NOT_CONFIGURED),
     )
 
 
@@ -246,12 +260,28 @@ def _sync_selected_ai_config(provider: str) -> AIProviderConfig:
     st.session_state["ai_model"] = config.model
     st.session_state["ai_api_key"] = config.api_key
     st.session_state["ai_base_url"] = config.base_url
-    st.session_state["ai_configured"] = config.configured
+    st.session_state["ai_connection_status"] = config.connection_status
+    st.session_state["ai_configured"] = config.connection_status != STATUS_NOT_CONFIGURED
     return config
 
 
+def _reset_provider_config(provider: str) -> None:
+    st.session_state["ai_provider_configs"][provider] = {
+        "provider": provider,
+        "model": get_default_model(provider),
+        "custom_model": "",
+        "resolved_model": get_default_model(provider)
+        if get_default_model(provider) != "custom"
+        else "",
+        "api_key": "",
+        "base_url": "",
+        "connection_status": STATUS_NOT_CONFIGURED,
+    }
+    _sync_selected_ai_config(provider)
+
+
 def _format_ai_api_error(exc: Exception) -> str:
-    err = str(exc)
+    err = mask_sensitive_text(str(exc))
     err_lower = err.lower()
     exc_name = exc.__class__.__name__.lower()
     if "auth" in err_lower or "api_key" in err_lower or "401" in err_lower:
@@ -265,7 +295,7 @@ def _format_ai_api_error(exc: Exception) -> str:
         and ("not found" in err_lower or "unavailable" in err_lower or "does not exist" in err_lower)
     ) or "notfound" in exc_name:
         return f"Model unavailable: {err}"
-    return f"OpenAI API error: {err}"
+    return f"Connection failed: {err}"
 
 
 # ──────────────────────────────────────────────
@@ -398,16 +428,30 @@ elif page == L["nav_ai"]:
         else 0,
         key="ai_provider_select",
     )
+    if provider != current_provider:
+        if current_provider in SUPPORTED_PROVIDERS:
+            _reset_provider_config(current_provider)
+        st.session_state["ai_provider"] = provider
+        _reset_provider_config(provider)
+
     provider_config = _sync_selected_ai_config(provider)
+    raw_provider_config = st.session_state["ai_provider_configs"][provider]
     provider_models = PROVIDER_MODELS[provider]
+    stored_model = raw_provider_config.get("model", get_default_model(provider))
 
     with st.form("ai_model_form"):
-        current_model = provider_config.model
         model_name = st.selectbox(
             L["model_name"],
             provider_models,
-            index=provider_models.index(current_model) if current_model in provider_models else 0,
+            index=provider_models.index(stored_model) if stored_model in provider_models else 0,
         )
+        custom_model_name = ""
+        if model_name == "custom":
+            custom_model_name = st.text_input(
+                "Custom Model Name",
+                value=raw_provider_config.get("custom_model", ""),
+                placeholder="Enter model name",
+            )
         base_url_input = ""
         if provider_requires_base_url(provider):
             base_url_input = st.text_input(
@@ -422,35 +466,57 @@ elif page == L["nav_ai"]:
         )
 
         save_ai = st.form_submit_button(L["save_ai"])
+        test_ai = st.form_submit_button("Test Connection")
 
-    if save_ai:
-        next_api_key = api_key_input or provider_config.api_key
-        next_base_url = base_url_input if provider_requires_base_url(provider) else ""
-        if next_api_key and (next_base_url or not provider_requires_base_url(provider)):
-            # Store in session_state — never written to disk
+    next_api_key = api_key_input or provider_config.api_key
+    next_base_url = base_url_input if provider_requires_base_url(provider) else ""
+    resolved_model = resolve_model(model_name, custom_model_name)
+
+    if save_ai or test_ai:
+        if provider_requires_base_url(provider) and not next_base_url:
+            st.error("Missing Base URL")
+        elif not next_api_key:
+            st.error("Missing API key")
+        elif not resolved_model:
+            st.error("Missing Model Name")
+        else:
             st.session_state["ai_provider_configs"][provider] = {
                 "provider": provider,
                 "model": model_name,
+                "custom_model": custom_model_name,
+                "resolved_model": resolved_model,
                 "api_key": next_api_key,
                 "base_url": next_base_url,
+                "connection_status": STATUS_CONFIGURED,
             }
             provider_config = _sync_selected_ai_config(provider)
-            st.success(f"{provider} configured — model: `{model_name}`")
-            st.caption("Key stored in session memory only. Not saved to disk or database.")
+            if save_ai:
+                st.success(f"{provider} configured - model: `{resolved_model}`")
+                st.caption("Run Test Connection before using this provider in CRM.")
+
+    if test_ai and provider_config.configured:
+        with st.spinner("Testing AI provider connection..."):
+            result = test_connection(provider_config)
+        st.session_state["ai_provider_configs"][provider]["connection_status"] = result.status
+        provider_config = _sync_selected_ai_config(provider)
+        if result.status == STATUS_CONNECTED:
+            st.success(result.message)
+        elif result.status == STATUS_NOT_CONFIGURED:
+            st.error(result.message)
+        elif result.status == STATUS_NOT_SUPPORTED:
+            st.info(result.message)
         else:
-            missing = "Base URL and API Key are required." if provider_requires_base_url(provider) else "API Key is required."
-            st.error(missing)
+            st.error(result.message)
 
     st.divider()
     provider_config = _sync_selected_ai_config(provider)
-    configured = provider_config.configured
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(L["ai_provider"], provider_config.provider)
     with c2:
-        st.metric(L["model_name"], provider_config.model)
+        st.metric(L["model_name"], provider_config.model or "Not set")
     with c3:
-        st.metric("Status", "Ready" if configured else "Not configured")
+        st.metric("Connection Status", provider_config.connection_status)
     if provider_requires_base_url(provider):
         st.caption(f"Base URL: `{provider_config.base_url or 'Not set'}`")
 
@@ -627,24 +693,26 @@ elif page == L["nav_crm"]:
 
     # ── AI status banner ──────────────────────────
     selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
-    ai_configured = selected_config.configured
+    ai_connected = selected_config.connection_status == STATUS_CONNECTED
     st.subheader("Current AI Status")
     status_col1, status_col2, status_col3 = st.columns(3)
     with status_col1:
         st.metric("Provider", selected_config.provider)
     with status_col2:
-        st.metric("Model", selected_config.model)
+        st.metric("Model", selected_config.model or "Not set")
     with status_col3:
-        st.metric("API", "configured" if ai_configured else "Not configured")
-    if ai_configured and is_provider_integrated(selected_config.provider):
+        st.metric("Connection Status", selected_config.connection_status)
+    if ai_connected:
         st.success(
-            f"AI Model ready: **{st.session_state.get('ai_provider')}** — "
+            f"AI Provider connected: **{st.session_state.get('ai_provider')}** — "
             f"`{selected_config.model}`"
         )
-    elif ai_configured:
+    elif selected_config.connection_status == STATUS_NOT_SUPPORTED:
         st.info(COMING_SOON_MESSAGE)
-    else:
+    elif selected_config.connection_status == STATUS_NOT_CONFIGURED:
         st.warning("No AI model configured. Please complete AI Model Setup first.")
+    else:
+        st.warning(CONNECTION_REQUIRED_MESSAGE)
 
     # ── Customer message input ────────────────────
     st.subheader("Customer Message")
@@ -659,7 +727,10 @@ elif page == L["nav_crm"]:
     btn_col1, btn_col2 = st.columns([3, 1])
     with btn_col1:
         generate_clicked = st.button(
-            "Generate Draft Reply", type="primary", use_container_width=True
+            "Generate Draft Reply",
+            type="primary",
+            use_container_width=True,
+            disabled=not ai_connected,
         )
     with btn_col2:
         clear_clicked = st.button("Clear", use_container_width=True)
@@ -676,7 +747,7 @@ elif page == L["nav_crm"]:
         else:
             st.session_state["crm_message"] = customer_input
             selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
-            if ai_configured and is_provider_integrated(selected_config.provider):
+            if selected_config.connection_status == STATUS_CONNECTED:
                 with st.spinner("Generating AI draft..."):
                     try:
                         reply = generate_reply(
@@ -691,14 +762,14 @@ elif page == L["nav_crm"]:
                             st.error("AI returned an empty response. Please try again.")
                     except Exception as e:
                         st.error(_format_ai_api_error(e))
-            elif ai_configured:
+            elif selected_config.connection_status == STATUS_NOT_SUPPORTED:
                 st.session_state["crm_reply"] = ""
                 st.session_state["crm_reply_source"] = ""
                 st.info(COMING_SOON_MESSAGE)
             else:
                 st.session_state["crm_reply"] = ""
                 st.session_state["crm_reply_source"] = ""
-                st.error("No AI model configured. Please complete AI Model Setup first.")
+                st.error(CONNECTION_REQUIRED_MESSAGE)
 
     # ── Draft reply output panel ──────────────────
     if st.session_state["crm_reply"]:

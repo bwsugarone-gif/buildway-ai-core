@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 apps/streamlit_demo/app.py
-Buildway AI Core — SaaS Onboarding Demo (Phase 0.3E)
-UI polish: no decorative emojis in titles, cost model at bottom,
-FAQ data template in Knowledge Base, bilingual professional wording.
+Buildway AI Core — SaaS Onboarding Demo (Phase 0.4A)
+CRM AI Reply Workflow MVP: template-based fake AI reply with session state.
 No real API connections. API keys never stored or committed.
 """
 
@@ -498,45 +497,143 @@ elif page == L["nav_kb"]:
         st.caption("In Phase 1, files will be chunked and indexed into Qdrant per tenant_id.")
 
 # ──────────────────────────────────────────────
-# Page: CRM Demo
+# Page: CRM Demo  (Phase 0.4A — AI Reply Workflow)
 # ──────────────────────────────────────────────
 elif page == L["nav_crm"]:
-    st.title("CRM AI Assist Demo")
-    st.info("Tenant: **Demo Trading Company** | Industry: Foreign Trade | Channel: WhatsApp")
 
-    demo_message = st.text_area(
-        L["customer_msg"],
-        value="Hi, what is your MOQ and delivery time?",
-        height=80,
+    # ── Template-based fake AI reply ─────────────
+    def _generate_fake_reply(msg: str) -> str:
+        m = msg.lower()
+        if "moq" in m:
+            body = (
+                "Regarding your enquiry on MOQ, our minimum order quantity varies by product model. "
+                "Kindly share the specific model number and required quantity so we can provide "
+                "you with an accurate confirmation."
+            )
+        elif "delivery" in m or "lead time" in m:
+            body = (
+                "Our standard lead time is 15-20 working days after order confirmation and deposit receipt. "
+                "For urgent orders, please let us know your required delivery date and we will advise "
+                "on available options."
+            )
+        elif "shipping" in m or "freight" in m:
+            body = (
+                "We ship via sea freight (FCL/LCL) and air freight depending on order volume and urgency. "
+                "Shipping terms are typically FOB or CIF. Please advise your destination port and "
+                "preferred Incoterms so we can prepare a shipping quotation."
+            )
+        elif "payment" in m or "terms" in m:
+            body = (
+                "Our standard payment terms are 30% T/T deposit upon order confirmation, "
+                "with the remaining 70% T/T before shipment. "
+                "For established clients, we may offer extended terms subject to credit review."
+            )
+        else:
+            body = (
+                "Thank you for reaching out. We have received your enquiry and our sales team "
+                "will review the details and respond with a full quotation within 1 business day. "
+                "Please feel free to share any additional specifications or requirements."
+            )
+        return (
+            "Dear Customer,\n\n"
+            "Thank you for your inquiry.\n\n"
+            + body
+            + "\n\nBest regards,\nSales Team"
+        )
+
+    # ── Session state init ────────────────────────
+    if "crm_reply" not in st.session_state:
+        st.session_state["crm_reply"] = ""
+    if "crm_message" not in st.session_state:
+        st.session_state["crm_message"] = "Hi, what is your MOQ and delivery time?"
+
+    st.title("CRM AI Assist")
+    st.caption(
+        "Tenant: Demo Trading Company  |  Industry: Foreign Trade  |  Channel: WhatsApp"
     )
 
-    if st.button("Generate AI Draft Reply (Demo)"):
-        with st.spinner("Generating..."):
-            draft_reply = (
-                "Thank you for your enquiry. Our MOQ and delivery time depend on the "
-                "product model. Please allow us to check the details and provide you "
-                "with an accurate quotation shortly."
+    # ── Customer message input ────────────────────
+    st.subheader("Customer Message")
+    customer_input = st.text_area(
+        "customer_input",
+        value=st.session_state["crm_message"],
+        height=110,
+        label_visibility="collapsed",
+        placeholder="Paste or type the customer message here...",
+    )
+
+    btn_col1, btn_col2 = st.columns([3, 1])
+    with btn_col1:
+        generate_clicked = st.button(
+            "Generate Draft Reply", type="primary", use_container_width=True
+        )
+    with btn_col2:
+        clear_clicked = st.button("Clear", use_container_width=True)
+
+    if clear_clicked:
+        st.session_state["crm_reply"] = ""
+        st.session_state["crm_message"] = ""
+        st.rerun()
+
+    if generate_clicked:
+        if customer_input.strip():
+            st.session_state["crm_message"] = customer_input
+            st.session_state["crm_reply"] = _generate_fake_reply(customer_input)
+        else:
+            st.warning("Please enter a customer message before generating.")
+
+    # ── Draft reply output panel ──────────────────
+    if st.session_state["crm_reply"]:
+        st.divider()
+        st.subheader("Draft Reply")
+
+        with st.container(border=True):
+            st.markdown(
+                "<div style='font-family: Arial, sans-serif; font-size: 14px; "
+                "line-height: 1.8; white-space: pre-wrap; padding: 4px 0;'>"
+                + st.session_state["crm_reply"].replace("\n", "<br>")
+                + "</div>",
+                unsafe_allow_html=True,
             )
-        st.success("AI Draft Reply (placeholder):")
-        st.info(draft_reply)
-        st.caption("Static placeholder. Real AI reply requires API key in AI Model Setup.")
+
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            st.button("Draft Reply", disabled=True, use_container_width=True)
+        with action_col2:
+            if st.button("Copy Reply", use_container_width=True):
+                st.toast(
+                    "Reply copied (browser clipboard requires Phase 0.4B JS integration)."
+                )
+
+        st.caption(
+            "Phase 0.4A: Template-based reply. "
+            "Real AI reply via OpenAI / Claude will be enabled in Phase 0.4B "
+            "once API key is configured in AI Model Setup."
+        )
 
     st.divider()
+
+    # ── Customer memory panel ─────────────────────
     st.subheader("Customer Memory")
-    m1, m2, m3 = st.columns(3)
-    with m1:
+    mem_col1, mem_col2, mem_col3 = st.columns(3)
+    with mem_col1:
         st.text_area("Customer Summary", value="(Not connected)", height=80, disabled=True)
-    with m2:
+    with mem_col2:
         st.text_area("Last Inquiry", value="(Not connected)", height=80, disabled=True)
-    with m3:
+    with mem_col3:
         st.text_area("Follow-up Status", value="(Not connected)", height=80, disabled=True)
-    st.caption("Customer memory stored per tenant_id in Supabase in Phase 1.")
+    st.caption("Customer memory will be stored per tenant_id in Supabase in Phase 1.")
 
     st.divider()
+
+    # ── Save session ──────────────────────────────
     st.subheader(L["save_session"])
     with st.form("session_form"):
         customer_ref = st.text_input(L["customer_ref"], value="CUST-001")
-        customer_message = st.text_input(L["customer_msg"], value="What is your MOQ?")
+        customer_message_save = st.text_input(
+            L["customer_msg"],
+            value=st.session_state.get("crm_message", "What is your MOQ?"),
+        )
         submitted = st.form_submit_button(L["save_session"])
 
     if submitted:
@@ -549,7 +646,7 @@ elif page == L["nav_crm"]:
                 selected_agents=["crm_agent"],
                 risk_level="low",
                 analysis_summary="CRM demo session.",
-                question=customer_message,
+                question=customer_message_save,
             )
             st.success(f"Session saved: `{sid}`")
             sessions = load_sessions(project_ref=customer_ref)
@@ -558,7 +655,10 @@ elif page == L["nav_crm"]:
                 st.json(sessions[0])
         except Exception as e:
             st.warning(f"Session memory not connected (expected in skeleton): {e}")
-            st.info(f"Would save: customer_ref=`{customer_ref}`, message=`{customer_message}`")
+            st.info(
+                f"Would save: customer_ref=`{customer_ref}`, "
+                f"message=`{customer_message_save}`"
+            )
 
 # ──────────────────────────────────────────────
 # Page: Usage Logs
@@ -578,4 +678,6 @@ elif page == L["nav_logs"]:
         }),
         use_container_width=True,
     )
-    st.caption("In production, usage_logs table in Supabase tracks all API calls per tenant_id.")
+    st.caption(
+        "In production, usage_logs table in Supabase tracks all API calls per tenant_id."
+    )

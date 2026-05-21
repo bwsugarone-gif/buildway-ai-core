@@ -1,17 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 apps/streamlit_demo/app.py
-Buildway AI Core — SaaS Onboarding Demo (Phase 0.3B)
-
-Multi-page Streamlit demo with sidebar navigation.
-No real API connections — placeholder UI only.
-API keys are never stored or committed.
+Buildway AI Core — SaaS Onboarding Demo (Phase 0.3D)
+Language selector, Login card on Home, Cost model section.
+No real API connections. API keys never stored or committed.
 """
 
 import sys
 from pathlib import Path
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
@@ -23,7 +20,139 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────────
-# Sidebar — Logo + Navigation
+# UI Dictionary (i18n skeleton)
+# ──────────────────────────────────────────────
+LABELS = {
+    "繁體中文": {
+        "nav_home": "🏠 主頁",
+        "nav_tenant": "🏢 租戶設定",
+        "nav_ai": "🤖 AI 模型設定",
+        "nav_db": "🗄️ 資料庫設定",
+        "nav_kb": "📚 知識庫",
+        "nav_crm": "💬 CRM 示範",
+        "nav_logs": "📊 使用記錄",
+        "lang_label": "語言 / Language",
+        "login_title": "客戶登入入口",
+        "login_email": "電郵",
+        "login_password": "密碼",
+        "login_btn": "登入",
+        "login_forgot": "忘記密碼？",
+        "login_coming": "認證系統將於 Phase 0.4 推出。",
+        "login_demo_note": "示範模式：無需登入。",
+        "company_name": "公司名稱",
+        "industry": "行業",
+        "contact_email": "聯絡電郵",
+        "channel": "預設渠道",
+        "save_profile": "儲存租戶資料",
+        "ai_provider": "AI 供應商",
+        "model_name": "模型名稱",
+        "api_key": "API Key",
+        "base_url": "Base URL",
+        "save_ai": "儲存 AI 設定",
+        "db_mode": "資料庫模式",
+        "db_hosted": "Buildway 託管",
+        "db_client": "客戶自有資料庫 API",
+        "db_url": "資料庫 URL",
+        "service_key": "API Key / Service Key",
+        "readonly_ep": "只讀 API Endpoint（選填）",
+        "notes": "備註",
+        "qdrant_url": "Qdrant URL",
+        "qdrant_key": "Qdrant API Key",
+        "collection": "Collection 名稱",
+        "save_db": "儲存資料庫設定",
+        "customer_ref": "客戶編號",
+        "customer_msg": "客戶訊息",
+        "save_session": "儲存客戶對話",
+        "cost_model_title": "SaaS 費用模式",
+    },
+    "简体中文": {
+        "nav_home": "🏠 主页",
+        "nav_tenant": "🏢 租户设置",
+        "nav_ai": "🤖 AI 模型设置",
+        "nav_db": "🗄️ 数据库设置",
+        "nav_kb": "📚 知识库",
+        "nav_crm": "💬 CRM 演示",
+        "nav_logs": "📊 使用记录",
+        "lang_label": "语言 / Language",
+        "login_title": "客户登录入口",
+        "login_email": "邮箱",
+        "login_password": "密码",
+        "login_btn": "登录",
+        "login_forgot": "忘记密码？",
+        "login_coming": "认证系统将于 Phase 0.4 推出。",
+        "login_demo_note": "演示模式：无需登录。",
+        "company_name": "公司名称",
+        "industry": "行业",
+        "contact_email": "联系邮箱",
+        "channel": "默认渠道",
+        "save_profile": "保存租户资料",
+        "ai_provider": "AI 供应商",
+        "model_name": "模型名称",
+        "api_key": "API Key",
+        "base_url": "Base URL",
+        "save_ai": "保存 AI 设置",
+        "db_mode": "数据库模式",
+        "db_hosted": "Buildway 托管",
+        "db_client": "客户自有数据库 API",
+        "db_url": "数据库 URL",
+        "service_key": "API Key / Service Key",
+        "readonly_ep": "只读 API Endpoint（选填）",
+        "notes": "备注",
+        "qdrant_url": "Qdrant URL",
+        "qdrant_key": "Qdrant API Key",
+        "collection": "Collection 名称",
+        "save_db": "保存数据库设置",
+        "customer_ref": "客户编号",
+        "customer_msg": "客户消息",
+        "save_session": "保存客户对话",
+        "cost_model_title": "SaaS 费用模式",
+    },
+    "English": {
+        "nav_home": "🏠 Home",
+        "nav_tenant": "🏢 Tenant Setup",
+        "nav_ai": "🤖 AI Model Setup",
+        "nav_db": "🗄️ Database Setup",
+        "nav_kb": "📚 Knowledge Base",
+        "nav_crm": "💬 CRM Demo",
+        "nav_logs": "📊 Usage Logs",
+        "lang_label": "Language",
+        "login_title": "Client Login Portal",
+        "login_email": "Email",
+        "login_password": "Password",
+        "login_btn": "Login",
+        "login_forgot": "Forgot password?",
+        "login_coming": "Authentication system coming in Phase 0.4.",
+        "login_demo_note": "Demo mode: no login required.",
+        "company_name": "Company Name",
+        "industry": "Industry",
+        "contact_email": "Contact Email",
+        "channel": "Default Channel",
+        "save_profile": "Save Tenant Profile",
+        "ai_provider": "AI Provider",
+        "model_name": "Model Name",
+        "api_key": "API Key",
+        "base_url": "Base URL",
+        "save_ai": "Save AI Config",
+        "db_mode": "Database Mode",
+        "db_hosted": "Buildway Hosted",
+        "db_client": "Client Existing Database API",
+        "db_url": "Database URL",
+        "service_key": "API Key / Service Key",
+        "readonly_ep": "Read-only API Endpoint (optional)",
+        "notes": "Notes",
+        "qdrant_url": "Qdrant URL",
+        "qdrant_key": "Qdrant API Key",
+        "collection": "Collection Name",
+        "save_db": "Save Database Config",
+        "customer_ref": "Customer Ref",
+        "customer_msg": "Customer Message",
+        "save_session": "Save Customer Session",
+        "cost_model_title": "SaaS Cost Model",
+    },
+}
+
+# ──────────────────────────────────────────────
+# Sidebar
 # ──────────────────────────────────────────────
 LOGO_PATH = Path(__file__).parent.parent.parent / "assets" / "logo.png"
 
@@ -36,16 +165,21 @@ with st.sidebar:
     st.caption("AI Core SaaS Platform")
     st.divider()
 
+    lang = st.selectbox("語言 / Language", ["繁體中文", "简体中文", "English"], index=0)
+    L = LABELS[lang]
+
+    st.divider()
+
     page = st.radio(
         "Navigation",
         [
-            "🏠 Home",
-            "🏢 Tenant Setup",
-            "🤖 AI Model Setup",
-            "🗄️ Database Setup",
-            "📚 Knowledge Base",
-            "💬 CRM Demo",
-            "📊 Usage Logs",
+            L["nav_home"],
+            L["nav_tenant"],
+            L["nav_ai"],
+            L["nav_db"],
+            L["nav_kb"],
+            L["nav_crm"],
+            L["nav_logs"],
         ],
         label_visibility="collapsed",
     )
@@ -53,15 +187,56 @@ with st.sidebar:
 # ──────────────────────────────────────────────
 # Page: Home
 # ──────────────────────────────────────────────
-if page == "🏠 Home":
+if page == L["nav_home"]:
     st.title("Buildway AI Core")
-    st.caption("Multi-industry AI workflow framework — SaaS Platform")
+    st.caption("Buildway Tech (HK) Limited — Multi-industry AI SaaS Platform")
 
-    st.info(
-        "**Phase 0.3B Demo** — UI skeleton only. "
-        "No real API connections. No data is stored or transmitted."
-    )
+    # ── Login Card (first section) ──
+    st.subheader(f"🔐 {L['login_title']}")
+    with st.container(border=True):
+        st.warning(f"**{L['login_coming']}**")
+        st.caption(L["login_demo_note"])
+        login_col1, login_col2 = st.columns(2)
+        with login_col1:
+            st.text_input(L["login_email"], placeholder="admin@yourcompany.com", disabled=True)
+        with login_col2:
+            st.text_input(L["login_password"], type="password", placeholder="••••••••", disabled=True)
+        st.button(L["login_btn"], disabled=True)
+        st.markdown(f"_{L['login_forgot']}_")
+        st.markdown("""
+**Coming in Phase 0.4:**
+- Admin login
+- Staff login
+- Tenant isolation
+- Role-based permission
+""")
 
+    st.divider()
+
+    # ── Cost Model ──
+    st.subheader(f"💰 {L['cost_model_title']}")
+    with st.container(border=True):
+        st.markdown("""
+**A. Buildway Hosted**
+Buildway provides hosting, tenant database, vector database and platform maintenance.
+Client pays monthly SaaS fee. Usage beyond included quota may be charged separately.
+
+**B. Client Existing Database API**
+Client provides database / ERP / CRM API. Buildway only connects to client API.
+Client keeps full data ownership.
+
+**C. AI Model API**
+Client provides OpenAI / Claude / Gemini / DeepSeek API key, or
+Buildway can provide managed AI usage as optional paid add-on.
+
+**D. WhatsApp API**
+Client owns WhatsApp Business API and Meta account.
+Buildway integrates the webhook and workflow.
+""")
+
+    st.divider()
+
+    # ── Core Modules ──
     st.subheader("📦 Core Modules")
     st.markdown("""
 | Module | Path | Description |
@@ -86,58 +261,46 @@ if page == "🏠 Home":
 | ERP | `verticals/erp/` | Placeholder |
 """)
 
-    st.divider()
-    st.subheader("🔐 Login System")
-    st.warning("**Coming Soon** — Login system is not yet implemented.")
-    st.markdown("""
-- Admin login
-- Staff login
-- Tenant isolation
-- Role-based permission
-""")
-
 # ──────────────────────────────────────────────
 # Page: Tenant Setup
 # ──────────────────────────────────────────────
-elif page == "🏢 Tenant Setup":
-    st.title("🏢 Tenant Setup")
-    st.caption("Configure your company profile for this SaaS tenant.")
+elif page == L["nav_tenant"]:
+    st.title(L["nav_tenant"])
 
     with st.form("tenant_form"):
-        company_name = st.text_input("Company Name", value="Demo Trading Company")
-        industry = st.text_input("Industry", value="Foreign Trade")
-        contact_email = st.text_input("Contact Email", value="admin@example.com")
-        default_channel = st.selectbox(
-            "Default Channel", ["WhatsApp", "Email", "Web Chat"], index=0
-        )
-        save_tenant = st.form_submit_button("Save Tenant Profile")
+        company_name = st.text_input(L["company_name"], value="Demo Trading Company")
+        industry = st.text_input(L["industry"], value="Foreign Trade")
+        contact_email = st.text_input(L["contact_email"], value="admin@example.com")
+        default_channel = st.selectbox(L["channel"], ["WhatsApp", "Email", "Web Chat"], index=0)
+        save_tenant = st.form_submit_button(L["save_profile"])
 
     if save_tenant:
-        st.success(
-            f"Tenant profile saved (demo): **{company_name}** | {industry} | {default_channel}"
-        )
-        st.caption("In production, this will be stored in the tenants table with a unique tenant_id.")
+        st.success(f"{L['save_profile']}: **{company_name}** | {industry} | {default_channel}")
+        st.caption("In production, stored in tenants table with unique tenant_id.")
 
 # ──────────────────────────────────────────────
 # Page: AI Model Setup
 # ──────────────────────────────────────────────
-elif page == "🤖 AI Model Setup":
-    st.title("🤖 AI Model Setup")
-    st.caption("Configure your AI provider. You bring your own API key.")
+elif page == L["nav_ai"]:
+    st.title(L["nav_ai"])
 
     st.warning(
-        "🔒 **Security Notice:** API keys are not stored in this demo version. "
+        "🔒 API keys are not stored in this demo version. "
         "Production version will store encrypted keys in a secure backend."
+    )
+    st.info(
+        "💡 Client-owned API key is recommended to avoid mixed token billing. "
+        "Buildway-managed AI usage can be provided as a paid add-on."
     )
 
     provider = st.selectbox(
-        "AI Provider",
+        L["ai_provider"],
         ["OpenAI", "Claude / Anthropic", "DeepSeek", "Gemini", "Custom OpenAI-Compatible API"],
     )
 
     with st.form("ai_model_form"):
         model_name = st.text_input(
-            "Model Name",
+            L["model_name"],
             value={
                 "OpenAI": "gpt-4o",
                 "Claude / Anthropic": "claude-3-5-sonnet-20241022",
@@ -147,56 +310,56 @@ elif page == "🤖 AI Model Setup":
             }.get(provider, ""),
         )
         api_key = st.text_input(
-            f"{provider} API Key",
+            f"{provider} {L['api_key']}",
             type="password",
             placeholder="sk-... (never stored or committed)",
         )
         if provider == "Custom OpenAI-Compatible API":
             base_url = st.text_input(
-                "Base URL",
+                L["base_url"],
                 placeholder="https://your-api-endpoint.com/v1",
             )
-        save_ai = st.form_submit_button("Save AI Model Config")
+        save_ai = st.form_submit_button(L["save_ai"])
 
     if save_ai:
         if api_key:
             st.success(f"✅ **{provider}** configured — model: `{model_name}`")
             st.caption("Key accepted (demo only — not stored anywhere).")
         else:
-            st.error("API Key is required.")
+            st.error(f"{L['api_key']} is required.")
 
     st.divider()
-    st.subheader("Current Status")
-    status_col1, status_col2 = st.columns(2)
-    with status_col1:
-        st.metric("AI Provider", provider)
-    with status_col2:
-        st.metric("Status", "Not configured" if not st.session_state.get("ai_configured") else "Configured")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric(L["ai_provider"], provider)
+    with c2:
+        st.metric("Status", "Not configured")
 
 # ──────────────────────────────────────────────
 # Page: Database Setup
 # ──────────────────────────────────────────────
-elif page == "🗄️ Database Setup":
-    st.title("🗄️ Database Setup")
-    st.caption("Configure your database and vector store connections.")
+elif page == L["nav_db"]:
+    st.title(L["nav_db"])
 
     st.warning(
-        "🔒 **Security Notice:** API keys are not stored in this demo version. "
+        "🔒 API keys are not stored in this demo version. "
         "Production version will store encrypted keys in a secure backend."
     )
 
-    st.subheader("Database Mode")
+    st.subheader(L["db_mode"])
     db_mode = st.radio(
-        "Choose your database mode:",
-        ["Buildway Hosted", "Client Existing Database API"],
+        "Choose database mode:",
+        [L["db_hosted"], L["db_client"]],
         index=0,
+        label_visibility="collapsed",
     )
 
-    if db_mode == "Buildway Hosted":
+    if db_mode == L["db_hosted"]:
         st.info(
-            "**Buildway Hosted** — No client database required. "
-            "Buildway will host tenant database, knowledge base and memory."
+            f"**{L['db_hosted']}** — No external database is required from client. "
+            "Database / vector DB / storage are provided under Buildway SaaS plan."
         )
+        st.caption("Cost responsibility: included in monthly SaaS plan / subject to quota.")
     else:
         st.caption("Connect your existing database API.")
 
@@ -206,40 +369,37 @@ elif page == "🗄️ Database Setup":
                 ["Supabase", "PostgreSQL", "Firebase", "Custom REST API"],
             )
             db_url = st.text_input(
-                "Database URL",
+                L["db_url"],
                 placeholder="https://xxxx.supabase.co or postgresql://...",
             )
             db_service_key = st.text_input(
-                "API Key / Service Key",
+                L["service_key"],
                 type="password",
                 placeholder="(never stored or committed)",
             )
             db_readonly_endpoint = st.text_input(
-                "Read-only API Endpoint (optional)",
+                L["readonly_ep"],
                 placeholder="https://xxxx.supabase.co/rest/v1",
             )
-            db_notes = st.text_area("Notes", placeholder="e.g. project name, region, etc.", height=60)
+            db_notes = st.text_area(L["notes"], placeholder="e.g. project name, region", height=60)
 
             st.divider()
             st.markdown("**Vector Database (Qdrant)**")
             qdrant_url = st.text_input(
-                "Qdrant URL",
+                L["qdrant_url"],
                 placeholder="https://your-qdrant-instance.com or http://localhost:6333",
             )
             qdrant_api_key = st.text_input(
-                "Qdrant API Key",
+                L["qdrant_key"],
                 type="password",
                 placeholder="(never stored or committed)",
             )
-            collection_name = st.text_input(
-                "Collection Name",
-                value="crm_knowledge_base",
-            )
-            save_db = st.form_submit_button("Save Database Config")
+            collection_name = st.text_input(L["collection"], value="crm_knowledge_base")
+            save_db = st.form_submit_button(L["save_db"])
 
         if save_db:
             if db_url or qdrant_url:
-                st.success("Database config saved (demo — not stored anywhere).")
+                st.success(f"{L['save_db']} (demo — not stored anywhere).")
                 if db_url:
                     st.info(f"DB: `{db_provider}` — URL configured")
                 if qdrant_url:
@@ -250,19 +410,16 @@ elif page == "🗄️ Database Setup":
 # ──────────────────────────────────────────────
 # Page: Knowledge Base
 # ──────────────────────────────────────────────
-elif page == "📚 Knowledge Base":
-    st.title("📚 Knowledge Base")
-    st.caption("Upload and manage your tenant knowledge base.")
+elif page == L["nav_kb"]:
+    st.title(L["nav_kb"])
 
     kb_col1, kb_col2, kb_col3 = st.columns(3)
     with kb_col1:
-        st.metric("FAQ uploaded", "Not connected")
+        st.metric("FAQ", "Not connected")
     with kb_col2:
         st.metric("Product catalog", "Not connected")
     with kb_col3:
         st.metric("Reply templates", "Not connected")
-
-    st.caption("Connect a real knowledge base via Qdrant in Phase 1.")
 
     st.info(
         "**Phase 1 Knowledge Base** — Only the following documents are needed:\n\n"
@@ -270,7 +427,6 @@ elif page == "📚 Knowledge Base":
     )
 
     st.divider()
-
     st.subheader("Upload Documents (Demo)")
     st.caption(
         "Demo mode supports small files only. "
@@ -297,23 +453,18 @@ elif page == "📚 Knowledge Base":
 # ──────────────────────────────────────────────
 # Page: CRM Demo
 # ──────────────────────────────────────────────
-elif page == "💬 CRM Demo":
+elif page == L["nav_crm"]:
     st.title("💬 CRM AI Assist Demo")
-    st.caption("Foreign trade WhatsApp customer service — AI draft reply placeholder.")
-
-    # Tenant context reminder
     st.info("Tenant: **Demo Trading Company** | Industry: Foreign Trade | Channel: WhatsApp")
 
-    st.subheader("Customer Message")
     demo_message = st.text_area(
-        "Customer Message",
+        L["customer_msg"],
         value="Hi, what is your MOQ and delivery time?",
         height=80,
-        label_visibility="collapsed",
     )
 
     if st.button("Generate AI Draft Reply (Demo)"):
-        with st.spinner("Generating draft reply..."):
+        with st.spinner("Generating..."):
             draft_reply = (
                 "Thank you for your enquiry. Our MOQ and delivery time depend on the "
                 "product model. Please allow us to check the details and provide you "
@@ -321,27 +472,25 @@ elif page == "💬 CRM Demo":
             )
         st.success("AI Draft Reply (placeholder):")
         st.info(draft_reply)
-        st.caption(
-            "⚠️ Static placeholder. Real AI reply requires OpenAI/Claude API key configured in AI Model Setup."
-        )
+        st.caption("⚠️ Static placeholder. Real AI reply requires API key in AI Model Setup.")
 
     st.divider()
     st.subheader("🧠 Customer Memory")
-    mem_col1, mem_col2, mem_col3 = st.columns(3)
-    with mem_col1:
+    m1, m2, m3 = st.columns(3)
+    with m1:
         st.text_area("Customer Summary", value="(Not connected)", height=80, disabled=True)
-    with mem_col2:
+    with m2:
         st.text_area("Last Inquiry", value="(Not connected)", height=80, disabled=True)
-    with mem_col3:
+    with m3:
         st.text_area("Follow-up Status", value="(Not connected)", height=80, disabled=True)
-    st.caption("Customer memory will be stored per tenant_id in Supabase in Phase 1.")
+    st.caption("Customer memory stored per tenant_id in Supabase in Phase 1.")
 
     st.divider()
-    st.subheader("💾 Save Customer Session")
+    st.subheader(f"💾 {L['save_session']}")
     with st.form("session_form"):
-        customer_ref = st.text_input("Customer Ref", value="CUST-001")
-        customer_message = st.text_input("Customer Message", value="What is your MOQ?")
-        submitted = st.form_submit_button("Save Customer Session")
+        customer_ref = st.text_input(L["customer_ref"], value="CUST-001")
+        customer_message = st.text_input(L["customer_msg"], value="What is your MOQ?")
+        submitted = st.form_submit_button(L["save_session"])
 
     if submitted:
         try:
@@ -367,19 +516,19 @@ elif page == "💬 CRM Demo":
 # ──────────────────────────────────────────────
 # Page: Usage Logs
 # ──────────────────────────────────────────────
-elif page == "📊 Usage Logs":
-    st.title("📊 Usage Logs")
-    st.caption("Token usage and cost tracking per tenant.")
-
+elif page == L["nav_logs"]:
+    st.title(L["nav_logs"])
     st.info("Usage logs will be populated once AI Model is connected.")
 
     import pandas as pd
-    placeholder_data = {
-        "Date": ["—", "—", "—"],
-        "Tenant": ["Demo Trading Company", "—", "—"],
-        "Provider": ["OpenAI", "—", "—"],
-        "Tokens Used": [0, 0, 0],
-        "Estimated Cost (USD)": [0.00, 0.00, 0.00],
-    }
-    st.dataframe(pd.DataFrame(placeholder_data), use_container_width=True)
-    st.caption("In production, usage_logs table in Supabase will track all API calls per tenant_id.")
+    st.dataframe(
+        pd.DataFrame({
+            "Date": ["—", "—", "—"],
+            "Tenant": ["Demo Trading Company", "—", "—"],
+            "Provider": ["OpenAI", "—", "—"],
+            "Tokens Used": [0, 0, 0],
+            "Estimated Cost (USD)": [0.00, 0.00, 0.00],
+        }),
+        use_container_width=True,
+    )
+    st.caption("In production, usage_logs table in Supabase tracks all API calls per tenant_id.")

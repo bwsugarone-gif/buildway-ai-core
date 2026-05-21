@@ -20,9 +20,35 @@ This guide covers what a new tenant needs to prepare before going live on Buildw
 
 ### 3. FAQ Document
 - A list of common customer questions and standard answers
-- Format: plain text, Word, or PDF
+- **Recommended format: Excel (.xlsx) or CSV** with structured columns (see FAQ Data Template below)
+- Alternative formats: plain text, Word, or PDF
 - Used to build the tenant's RAG knowledge base
 - Minimum recommended: 20–50 Q&A pairs
+
+#### FAQ Data Template
+
+Prepare your FAQ as an Excel or CSV file with the following columns:
+
+| Column | Description |
+|---|---|
+| Category | Topic group, e.g. MOQ, Shipping, Payment |
+| Question | Customer question text |
+| Standard Answer | Approved reply for this question |
+| Can Auto Reply | Yes / No — whether AI can reply without human review |
+| Need Human Approval | Yes / No — whether staff must approve before sending |
+| Risk Level | Low / Medium / High |
+| Notes | Internal notes, e.g. "Do not quote exact price" |
+
+**Example row:**
+```
+Category: MOQ
+Question: What is your MOQ?
+Standard Answer: Our MOQ depends on product model. Please share the model number and quantity for confirmation.
+Can Auto Reply: Yes
+Need Human Approval: No
+Risk Level: Low
+Notes: Do not quote exact price.
+```
 
 ### 4. Product Catalog
 - Full product or service listing
@@ -45,6 +71,26 @@ This guide covers what a new tenant needs to prepare before going live on Buildw
   - After-hours auto-reply
 - Format: plain text or Word document
 - Templates are used in Phase 1 (AI Assist) and Phase 2 (Auto Mode)
+
+### 7. Optional: Historical Chat Examples
+- Sample past customer conversations (anonymized)
+- Helps AI learn company tone and response style
+- Format: Excel, CSV, or plain text
+
+---
+
+## Data Preparation Summary
+
+Client needs to prepare:
+- **FAQ** (Excel / CSV / DOCX / PDF) — structured FAQ template recommended
+- **Product Catalog** (Excel / CSV / PDF)
+- **MOQ Rules** (Excel / DOCX / PDF)
+- **Shipping Terms** (DOCX / PDF)
+- **Payment Terms** (DOCX / PDF)
+- **Reply Templates** (DOCX / TXT)
+- **Optional: Historical chat examples** (Excel / CSV / TXT)
+
+**Note:** If using Buildway Hosted database mode, client does not need to prepare a database server. Client still needs to prepare all business data listed above.
 
 ---
 

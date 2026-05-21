@@ -2,8 +2,8 @@
 """
 apps/streamlit_demo/app.py
 Buildway AI Core — SaaS Onboarding Demo (Phase 0.4A)
-CRM AI Reply Workflow MVP: template-based fake AI reply with session state.
-No real API connections. API keys never stored or committed.
+CRM AI Reply Workflow MVP: real OpenAI API reply with session state.
+API keys never stored or committed.
 """
 
 import sys
@@ -196,6 +196,13 @@ CRM_SYSTEM_PROMPT = (
 )
 
 
+def _ensure_ai_state_defaults() -> None:
+    st.session_state.setdefault("ai_provider", "OpenAI")
+    st.session_state.setdefault("ai_model", "gpt-4o-mini")
+    st.session_state.setdefault("ai_api_key", "")
+    st.session_state["ai_configured"] = bool(st.session_state.get("ai_api_key"))
+
+
 def _call_openai(api_key: str, model: str, user_message: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=api_key)
@@ -205,68 +212,33 @@ def _call_openai(api_key: str, model: str, user_message: str) -> str:
             {"role": "system", "content": CRM_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
+        temperature=0.7,
+        presence_penalty=0.2,
         timeout=30,
     )
     return response.choices[0].message.content or ""
 
 
-def _call_claude(api_key: str, model: str, user_message: str) -> str:
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=CRM_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-        timeout=30,
-    )
-    return response.content[0].text if response.content else ""
+def _generate_ai_reply(api_key: str, model: str, message: str) -> str:
+    return _call_openai(api_key, model, message)
 
 
-def _generate_ai_reply(provider: str, api_key: str, model: str, message: str) -> str:
-    if provider == "OpenAI":
-        return _call_openai(api_key, model, message)
-    return _call_claude(api_key, model, message)
-
-
-def _generate_template_reply(msg: str) -> str:
-    m = msg.lower()
-    if "moq" in m:
-        body = (
-            "Regarding your enquiry on MOQ, our minimum order quantity varies by product model. "
-            "Kindly share the specific model number and required quantity so we can provide "
-            "you with an accurate confirmation."
-        )
-    elif "delivery" in m or "lead time" in m:
-        body = (
-            "Our standard lead time is 15-20 working days after order confirmation and deposit receipt. "
-            "For urgent orders, please let us know your required delivery date and we will advise "
-            "on available options."
-        )
-    elif "shipping" in m or "freight" in m:
-        body = (
-            "We ship via sea freight (FCL/LCL) and air freight depending on order volume and urgency. "
-            "Shipping terms are typically FOB or CIF. Please advise your destination port and "
-            "preferred Incoterms so we can prepare a shipping quotation."
-        )
-    elif "payment" in m or "terms" in m:
-        body = (
-            "Our standard payment terms are 30% T/T deposit upon order confirmation, "
-            "with the remaining 70% T/T before shipment. "
-            "For established clients, we may offer extended terms subject to credit review."
-        )
-    else:
-        body = (
-            "Thank you for reaching out. We have received your enquiry and our sales team "
-            "will review the details and respond with a full quotation within 1 business day. "
-            "Please feel free to share any additional specifications or requirements."
-        )
-    return (
-        "Dear Customer,\n\n"
-        "Thank you for your inquiry.\n\n"
-        + body
-        + "\n\nBest regards,\nSales Team"
-    )
+def _format_ai_api_error(exc: Exception) -> str:
+    err = str(exc)
+    err_lower = err.lower()
+    exc_name = exc.__class__.__name__.lower()
+    if "auth" in err_lower or "api_key" in err_lower or "401" in err_lower:
+        return f"Invalid API key: {err}"
+    if "quota" in err_lower or "insufficient_quota" in err_lower or "billing" in err_lower:
+        return f"Quota exceeded: {err}"
+    if "timeout" in err_lower or "timed out" in err_lower or "timeout" in exc_name:
+        return f"Timeout: {err}"
+    if (
+        "model" in err_lower
+        and ("not found" in err_lower or "unavailable" in err_lower or "does not exist" in err_lower)
+    ) or "notfound" in exc_name:
+        return f"Model unavailable: {err}"
+    return f"OpenAI API error: {err}"
 
 
 # ──────────────────────────────────────────────
@@ -376,6 +348,7 @@ elif page == L["nav_tenant"]:
 # Page: AI Model Setup
 # ──────────────────────────────────────────────
 elif page == L["nav_ai"]:
+    _ensure_ai_state_defaults()
     st.title(L["nav_ai"])
 
     st.warning(
@@ -391,29 +364,25 @@ elif page == L["nav_ai"]:
     # Provider selection (outside form so model list updates immediately)
     provider = st.selectbox(
         L["ai_provider"],
-        ["OpenAI", "Claude / Anthropic"],
+        ["OpenAI"],
         index=0,
         key="ai_provider_select",
     )
 
     OPENAI_MODELS = ["gpt-4o-mini", "gpt-4.1-mini"]
-    CLAUDE_MODELS = ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
 
     with st.form("ai_model_form"):
-        if provider == "OpenAI":
-            model_name = st.selectbox(L["model_name"], OPENAI_MODELS)
-            api_key_input = st.text_input(
-                "OpenAI API Key",
-                type="password",
-                placeholder="sk-... (session only, never stored)",
-            )
-        else:
-            model_name = st.selectbox(L["model_name"], CLAUDE_MODELS)
-            api_key_input = st.text_input(
-                "Anthropic API Key",
-                type="password",
-                placeholder="sk-ant-... (session only, never stored)",
-            )
+        current_model = st.session_state.get("ai_model", OPENAI_MODELS[0])
+        model_name = st.selectbox(
+            L["model_name"],
+            OPENAI_MODELS,
+            index=OPENAI_MODELS.index(current_model) if current_model in OPENAI_MODELS else 0,
+        )
+        api_key_input = st.text_input(
+            "OpenAI API Key",
+            type="password",
+            placeholder="sk-... (session only, never stored)",
+        )
 
         save_ai = st.form_submit_button(L["save_ai"])
 
@@ -423,13 +392,16 @@ elif page == L["nav_ai"]:
             st.session_state["ai_provider"] = provider
             st.session_state["ai_model"] = model_name
             st.session_state["ai_api_key"] = api_key_input
+            st.session_state["ai_configured"] = True
             st.success(f"{provider} configured — model: `{model_name}`")
             st.caption("Key stored in session memory only. Not saved to disk or database.")
         else:
+            st.session_state["ai_configured"] = False
             st.error("API Key is required.")
 
     st.divider()
-    configured = "ai_api_key" in st.session_state and st.session_state["ai_api_key"]
+    configured = bool(st.session_state.get("ai_api_key"))
+    st.session_state["ai_configured"] = configured
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric(L["ai_provider"], st.session_state.get("ai_provider", "Not set"))
@@ -596,6 +568,7 @@ elif page == L["nav_kb"]:
 elif page == L["nav_crm"]:
 
     # ── Session state init ────────────────────────
+    _ensure_ai_state_defaults()
     if "crm_reply" not in st.session_state:
         st.session_state["crm_reply"] = ""
     if "crm_reply_source" not in st.session_state:
@@ -610,16 +583,22 @@ elif page == L["nav_crm"]:
 
     # ── AI status banner ──────────────────────────
     ai_configured = bool(st.session_state.get("ai_api_key"))
+    st.session_state["ai_configured"] = ai_configured
+    st.subheader("Current AI Status")
+    status_col1, status_col2, status_col3 = st.columns(3)
+    with status_col1:
+        st.metric("Provider", st.session_state.get("ai_provider", "OpenAI"))
+    with status_col2:
+        st.metric("Model", st.session_state.get("ai_model", "gpt-4o-mini"))
+    with status_col3:
+        st.metric("API", "configured" if ai_configured else "Not configured")
     if ai_configured:
         st.success(
             f"AI Model ready: **{st.session_state.get('ai_provider')}** — "
             f"`{st.session_state.get('ai_model')}`"
         )
     else:
-        st.warning(
-            "AI Model not configured. Go to **AI Model 設定** to enter your API key. "
-            "Template reply will be used as fallback."
-        )
+        st.warning("No AI model configured. Please complete AI Model Setup first.")
 
     # ── Customer message input ────────────────────
     st.subheader("Customer Message")
@@ -654,33 +633,21 @@ elif page == L["nav_crm"]:
                 with st.spinner("Generating AI draft..."):
                     try:
                         reply = _generate_ai_reply(
-                            provider=st.session_state["ai_provider"],
                             api_key=st.session_state["ai_api_key"],
                             model=st.session_state["ai_model"],
                             message=customer_input,
                         )
                         if reply:
                             st.session_state["crm_reply"] = reply
-                            st.session_state["crm_reply_source"] = (
-                                f"{st.session_state['ai_provider']} / "
-                                f"{st.session_state['ai_model']}"
-                            )
+                            st.session_state["crm_reply_source"] = "OpenAI API"
                         else:
                             st.error("AI returned an empty response. Please try again.")
                     except Exception as e:
-                        err = str(e)
-                        if "api_key" in err.lower() or "authentication" in err.lower() or "401" in err:
-                            st.error("Invalid API key. Please check your key in AI Model 設定.")
-                        elif "timeout" in err.lower() or "timed out" in err.lower():
-                            st.error("Request timed out. Please try again.")
-                        elif "rate" in err.lower():
-                            st.error("Rate limit reached. Please wait a moment and try again.")
-                        else:
-                            st.error(f"AI API error: {err}")
+                        st.error(_format_ai_api_error(e))
             else:
-                # Fallback to template reply
-                st.session_state["crm_reply"] = _generate_template_reply(customer_input)
-                st.session_state["crm_reply_source"] = "Template (no API key)"
+                st.session_state["crm_reply"] = ""
+                st.session_state["crm_reply_source"] = ""
+                st.error("No AI model configured. Please complete AI Model Setup first.")
 
     # ── Draft reply output panel ──────────────────
     if st.session_state["crm_reply"]:

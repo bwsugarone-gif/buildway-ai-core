@@ -54,7 +54,7 @@ with st.sidebar:
 # Page: Home
 # ──────────────────────────────────────────────
 if page == "🏠 Home":
-    st.title("🤖 Buildway AI Core")
+    st.title("Buildway AI Core")
     st.caption("Multi-industry AI workflow framework — SaaS Platform")
 
     st.info(
@@ -185,55 +185,67 @@ elif page == "🗄️ Database Setup":
         "Production version will store encrypted keys in a secure backend."
     )
 
-    st.subheader("Relational Database")
-    db_provider = st.selectbox(
-        "Database Provider",
-        ["Supabase", "PostgreSQL", "Firebase", "Custom REST API", "None / Buildway Hosted"],
+    st.subheader("Database Mode")
+    db_mode = st.radio(
+        "Choose your database mode:",
+        ["Buildway Hosted", "Client Existing Database API"],
+        index=0,
     )
 
-    with st.form("db_form"):
-        db_url = st.text_input(
-            "Database URL",
-            placeholder="https://xxxx.supabase.co or postgresql://...",
+    if db_mode == "Buildway Hosted":
+        st.info(
+            "**Buildway Hosted** — No client database required. "
+            "Buildway will host tenant database, knowledge base and memory."
         )
-        db_service_key = st.text_input(
-            "API Key / Service Key",
-            type="password",
-            placeholder="(never stored or committed)",
-        )
-        db_readonly_endpoint = st.text_input(
-            "Read-only API Endpoint (optional)",
-            placeholder="https://xxxx.supabase.co/rest/v1",
-        )
-        db_notes = st.text_area("Notes", placeholder="e.g. project name, region, etc.", height=60)
+    else:
+        st.caption("Connect your existing database API.")
 
-        st.divider()
-        st.markdown("**Vector Database (Qdrant)**")
-        qdrant_url = st.text_input(
-            "Qdrant URL",
-            placeholder="https://your-qdrant-instance.com or http://localhost:6333",
-        )
-        qdrant_api_key = st.text_input(
-            "Qdrant API Key",
-            type="password",
-            placeholder="(never stored or committed)",
-        )
-        collection_name = st.text_input(
-            "Collection Name",
-            value="crm_knowledge_base",
-        )
+        with st.form("db_form"):
+            db_provider = st.selectbox(
+                "Database Provider",
+                ["Supabase", "PostgreSQL", "Firebase", "Custom REST API"],
+            )
+            db_url = st.text_input(
+                "Database URL",
+                placeholder="https://xxxx.supabase.co or postgresql://...",
+            )
+            db_service_key = st.text_input(
+                "API Key / Service Key",
+                type="password",
+                placeholder="(never stored or committed)",
+            )
+            db_readonly_endpoint = st.text_input(
+                "Read-only API Endpoint (optional)",
+                placeholder="https://xxxx.supabase.co/rest/v1",
+            )
+            db_notes = st.text_area("Notes", placeholder="e.g. project name, region, etc.", height=60)
 
-        save_db = st.form_submit_button("Save Database Config")
+            st.divider()
+            st.markdown("**Vector Database (Qdrant)**")
+            qdrant_url = st.text_input(
+                "Qdrant URL",
+                placeholder="https://your-qdrant-instance.com or http://localhost:6333",
+            )
+            qdrant_api_key = st.text_input(
+                "Qdrant API Key",
+                type="password",
+                placeholder="(never stored or committed)",
+            )
+            collection_name = st.text_input(
+                "Collection Name",
+                value="crm_knowledge_base",
+            )
+            save_db = st.form_submit_button("Save Database Config")
 
-    if save_db:
-        if db_url or qdrant_url:
-            st.success("Database config saved (demo — not stored anywhere).")
-            if db_url:
-                st.info(f"DB: `{db_provider}` — URL configured")
-            if qdrant_url:
-                st.info(f"Qdrant: collection `{collection_name}` — URL configured")
-        else:
-            st.warning("No database URL provided. Using placeholder mode.")
+        if save_db:
+            if db_url or qdrant_url:
+                st.success("Database config saved (demo — not stored anywhere).")
+                if db_url:
+                    st.info(f"DB: `{db_provider}` — URL configured")
+                if qdrant_url:
+                    st.info(f"Qdrant: collection `{collection_name}` — URL configured")
+            else:
+                st.warning("No database URL provided. Using placeholder mode.")
 
 # ──────────────────────────────────────────────
 # Page: Knowledge Base
@@ -251,9 +263,20 @@ elif page == "📚 Knowledge Base":
         st.metric("Reply templates", "Not connected")
 
     st.caption("Connect a real knowledge base via Qdrant in Phase 1.")
+
+    st.info(
+        "**Phase 1 Knowledge Base** — Only the following documents are needed:\n\n"
+        "- FAQ\n- Product catalog\n- MOQ / shipping terms / payment terms\n- Reply templates"
+    )
+
     st.divider()
 
     st.subheader("Upload Documents (Demo)")
+    st.caption(
+        "Demo mode supports small files only. "
+        "Recommended test file size: under 20MB. "
+        "Large files such as 200MB will be handled in production by background ingestion."
+    )
     uploaded = st.file_uploader(
         "Upload FAQ / Product Catalog / Templates",
         type=["pdf", "txt", "docx", "csv"],
@@ -261,7 +284,14 @@ elif page == "📚 Knowledge Base":
     )
     if uploaded:
         for f in uploaded:
-            st.info(f"📄 `{f.name}` — received (demo: not processed or stored)")
+            size_mb = f.size / (1024 * 1024)
+            if size_mb > 20:
+                st.warning(
+                    f"⚠️ `{f.name}` ({size_mb:.1f} MB) — File too large for demo mode. "
+                    "Production version will support large file ingestion via cloud storage."
+                )
+            else:
+                st.info(f"📄 `{f.name}` ({size_mb:.1f} MB) — received (demo: not processed or stored)")
         st.caption("In Phase 1, files will be chunked and indexed into Qdrant per tenant_id.")
 
 # ──────────────────────────────────────────────

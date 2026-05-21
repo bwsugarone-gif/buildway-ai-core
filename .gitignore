@@ -25,6 +25,9 @@ data/
 # Uploads
 uploads/
 
+# Projects (runtime data)
+projects/
+
 # Reports output
 reports/
 

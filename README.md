@@ -1,66 +1,133 @@
 # Buildway AI Core
 
-**Buildway AI Core** 是一個通用 AI 工作流程底層框架，可用於多行業 AI 應用開發。
+**Buildway AI Core** is a general AI operation platform for multi-industry SaaS deployment.
 
-## 定位
+It provides the shared infrastructure for AI-assisted workflows across verticals including construction, CRM, document processing, and ERP.
 
-本 repo 是 Buildway 旗下所有行業版本的共同核心，包括：
+---
 
-- 🏗️ **Construction** — 建築工地 AI 分析（HK-AICOS）
-- 🤝 **CRM** — 客戶關係管理 AI
-- 📄 **Document AI** — 文件智能處理
+## What It Does
 
-## 架構概覽
+- **CRM AI Assist** — AI drafts replies for customer enquiries; staff review and send
+- **WhatsApp Auto Mode** — AI handles routine queries autonomously (Phase 2)
+- **Document AI** — Intelligent document parsing, OCR, and extraction
+- **Construction AI** — Site analysis, safety checks, QS, and reporting (via HK-AICOS)
+- **ERP Integration** — Inventory and supplier management (Phase 3)
+
+---
+
+## Supported Verticals
+
+| Vertical | Status |
+|---|---|
+| CRM | Phase 1 — AI Assist |
+| Construction | Active (HK-AICOS) |
+| Document AI | Placeholder |
+| ERP | Phase 3 Placeholder |
+
+---
+
+## SaaS Model
+
+- Clients bring their own **WhatsApp Business API**
+- Clients bring their own **AI API key** (OpenAI / Claude)
+- Buildway provides the **SaaS platform and workflow engine**
+- Token costs are the **client's responsibility**
+- Each client is a **fully isolated tenant**
+
+See [docs/SAAS_MODEL.md](docs/SAAS_MODEL.md) for full details.
+
+---
+
+## Architecture
 
 ```
 buildway-ai-core/
-├── core/                    # 通用 AI 核心模組
-│   ├── memory/              # Session 記憶管理
-│   ├── rag/                 # RAG 文件檢索
-│   ├── document_processing/ # 文件載入與解析
-│   ├── ocr/                 # OCR 文字抽取
-│   ├── agents/              # Agent 路由框架
-│   ├── workflow/            # 工作流程工具
-│   ├── actions/             # Action 追蹤
-│   ├── reports/             # PDF 報告生成
-│   └── security/            # 安全層（佔位）
+├── core/                    # Domain-neutral AI modules
+│   ├── memory/              # Session memory
+│   ├── rag/                 # RAG retrieval
+│   ├── agents/              # Agent routing
+│   ├── workflow/            # Workflow tools
+│   ├── actions/             # Action tracking
+│   ├── reports/             # PDF generation
+│   ├── document_processing/ # File loading and parsing
+│   ├── ocr/                 # OCR extraction
+│   └── security/            # Auth and security (Phase 2)
 │
-├── verticals/               # 行業垂直模組
-│   ├── construction/        # 建築行業（HK-AICOS）
-│   ├── crm/                 # 客戶關係管理
-│   └── document_ai/         # 文件 AI
+├── services/                # External service integrations
+│   ├── whatsapp/            # WhatsApp Business API
+│   ├── email/               # Email integration
+│   ├── speech_to_text/      # STT transcription
+│   ├── ocr/                 # Cloud OCR
+│   └── pdf/                 # PDF service wrapper
 │
-├── apps/                    # 應用層
-│   ├── streamlit_demo/      # Streamlit Demo App
-│   └── api_server/          # API Server（佔位）
+├── verticals/               # Industry-specific modules
+│   ├── construction/        # HK-AICOS construction agents
+│   ├── crm/                 # CRM AI Assist
+│   ├── document_ai/         # Document intelligence
+│   └── erp/                 # ERP integration (Phase 3)
 │
-├── docs/                    # 文件
-└── tests/                   # 測試
+├── apps/                    # Application layer
+│   ├── streamlit_admin/     # Operator admin dashboard
+│   ├── streamlit_client/    # Client-facing portal
+│   └── api_server/          # REST API (Phase 2)
+│
+├── database/                # Schema drafts
+├── docs/                    # Documentation
+└── tests/                   # Test suite
 ```
 
-## 技術規格
+---
+
+## Roadmap
+
+- **Phase 1** — CRM AI Assist Mode (staff-assisted, AI drafts replies)
+- **Phase 2** — WhatsApp Auto Mode (AI handles routine queries autonomously)
+- **Phase 3** — ERP / Inventory API integration
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for full roadmap.
+
+---
+
+## Tech Stack
 
 - Python 3.11.x
-- Streamlit（Demo App）
-- ReportLab（PDF 生成）
-- pypdf / pytesseract（文件處理）
-- Anthropic / OpenAI（LLM）
+- Streamlit (admin and client apps)
+- ReportLab (PDF generation)
+- pypdf / pytesseract (document processing)
+- OpenAI / Anthropic (LLM — client-supplied keys)
+- PostgreSQL (production schema — see `database/schema.sql`)
 
-## 快速開始
+---
+
+## Quick Start
 
 ```bash
-# 安裝依賴
+# Install dependencies
 pip install -r requirements.txt
 
-# 運行 Demo App
+# Run demo app
 cd apps/streamlit_demo
 streamlit run app.py
 ```
 
-## 版本
+---
 
-- v0.1.0 — 初始架構拆分（從 HK-AICOS 抽出通用核心）
+## Rules
 
-## 授權
+1. `core/` must not contain industry-specific logic
+2. Construction logic stays in `verticals/construction/`
+3. CRM logic stays in `verticals/crm/`
+4. All tenant data must include `tenant_id`
+5. API keys are never hardcoded — use `.env` only
+6. See `.env.example` for required variables
 
-Buildway Tech (HK) Limited — 內部使用
+---
+
+## Version
+
+- v0.1.0 — Initial SaaS skeleton
+
+## Licence
+
+Buildway Tech (HK) Limited — Internal use

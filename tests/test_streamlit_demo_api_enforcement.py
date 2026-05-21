@@ -20,7 +20,8 @@ def test_crm_uses_openai_api_source_and_persists_configured_status():
     assert 'st.session_state["ai_provider"] = config.provider' in source
     assert 'st.session_state["ai_model"] = config.model' in source
     assert 'st.session_state["ai_api_key"] = config.api_key' in source
-    assert 'st.session_state["crm_reply_source"] = "OpenAI API"' in source
+    assert '"OpenAI API"' in source
+    assert '"OpenAI-Compatible API"' in source
 
 
 def test_multi_provider_ui_and_non_openai_placeholder_are_present():

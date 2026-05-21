@@ -9,7 +9,9 @@ status until their SDK integrations are implemented.
 """
 
 from dataclasses import dataclass
+import json
 import re
+from urllib import error, request
 
 
 PROVIDER_OPENAI = "OpenAI"
@@ -119,12 +121,25 @@ class ConnectionResult:
     message: str
 
 
+class OpenAICompatibleRequestError(RuntimeError):
+    def __init__(self, result: ConnectionResult):
+        super().__init__(result.message)
+        self.result = result
+
+
 def get_default_model(provider: str) -> str:
     return PROVIDER_MODELS.get(provider, ["custom"])[0]
 
 
 def provider_requires_base_url(provider: str) -> bool:
     return provider == PROVIDER_OPENAI_COMPATIBLE
+
+
+def normalize_openai_compatible_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized
+    return f"{normalized}/v1"
 
 
 def is_provider_integrated(provider: str) -> bool:
@@ -161,6 +176,70 @@ def classify_error(exc: Exception) -> ConnectionResult:
     return ConnectionResult(STATUS_FAILED, f"Connection failed: {raw}")
 
 
+def _classify_openai_compatible_error(exc: Exception, endpoint: str) -> ConnectionResult:
+    if isinstance(exc, TimeoutError):
+        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {endpoint}")
+    if isinstance(exc, error.HTTPError):
+        body = mask_sensitive_text(exc.read().decode("utf-8", errors="replace"))
+        if exc.code in {401, 403}:
+            return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {endpoint}: {body}")
+        return ConnectionResult(
+            STATUS_FAILED,
+            f"Connection failed calling {endpoint}: HTTP {exc.code} {body}",
+        )
+    message = mask_sensitive_text(str(exc))
+    err = message.lower()
+    if "timeout" in err or "timed out" in err:
+        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {endpoint}: {message}")
+    if "auth" in err or "api key" in err or "api_key" in err or "401" in err:
+        return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {endpoint}: {message}")
+    return ConnectionResult(STATUS_FAILED, f"Connection failed calling {endpoint}: {message}")
+
+
+def _post_openai_compatible_chat(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int | None = None,
+) -> str:
+    normalized_base_url = normalize_openai_compatible_base_url(base_url)
+    endpoint = f"{normalized_base_url}/chat/completions"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
+    req = request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with request.urlopen(req, timeout=30) as response:
+            raw_body = response.read().decode("utf-8")
+    except Exception as exc:
+        raise OpenAICompatibleRequestError(
+            _classify_openai_compatible_error(exc, endpoint)
+        ) from exc
+
+    parsed = json.loads(raw_body)
+    choices = parsed.get("choices", [])
+    if not choices:
+        return ""
+    message = choices[0].get("message", {})
+    return message.get("content", "") or ""
+
+
 def validate_config(config: AIProviderConfig) -> ConnectionResult | None:
     if not config.api_key:
         return ConnectionResult(STATUS_NOT_CONFIGURED, "Missing API key")
@@ -179,11 +258,25 @@ def test_connection(config: AIProviderConfig) -> ConnectionResult:
         return ConnectionResult(STATUS_COMING_SOON, COMING_SOON_MESSAGE)
 
     try:
+        if config.provider == PROVIDER_OPENAI_COMPATIBLE:
+            try:
+                content = _post_openai_compatible_chat(
+                    base_url=config.base_url,
+                    api_key=config.api_key,
+                    model=config.model,
+                    messages=[{"role": "user", "content": "Reply with OK only."}],
+                    temperature=0,
+                    max_tokens=8,
+                )
+            except OpenAICompatibleRequestError as exc:
+                return exc.result
+            if "OK" in content.upper() or content.strip():
+                return ConnectionResult(STATUS_CONNECTED, "Connection successful.")
+            return ConnectionResult(STATUS_FAILED, "Connection failed: empty response")
+
         from openai import OpenAI
 
         client_kwargs = {"api_key": config.api_key, "timeout": 30}
-        if config.provider == PROVIDER_OPENAI_COMPATIBLE:
-            client_kwargs["base_url"] = config.base_url
         client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(
             model=config.model,
@@ -207,9 +300,19 @@ def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: s
 
     from openai import OpenAI
 
-    client_kwargs = {"api_key": config.api_key, "timeout": 30}
     if config.provider == PROVIDER_OPENAI_COMPATIBLE:
-        client_kwargs["base_url"] = config.base_url
+        return _post_openai_compatible_chat(
+            base_url=config.base_url,
+            api_key=config.api_key,
+            model=config.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.7,
+        )
+
+    client_kwargs = {"api_key": config.api_key, "timeout": 30}
     client = OpenAI(**client_kwargs)
     response = client.chat.completions.create(
         model=config.model,

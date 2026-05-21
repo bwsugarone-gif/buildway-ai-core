@@ -773,7 +773,11 @@ elif page == L["nav_crm"]:
                         )
                         if reply:
                             st.session_state["crm_reply"] = reply
-                            st.session_state["crm_reply_source"] = "OpenAI API"
+                            st.session_state["crm_reply_source"] = (
+                                "OpenAI-Compatible API"
+                                if selected_config.provider == "OpenAI-Compatible"
+                                else "OpenAI API"
+                            )
                         else:
                             st.error("AI returned an empty response. Please try again.")
                     except Exception as e:

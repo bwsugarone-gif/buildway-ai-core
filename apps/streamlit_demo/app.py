@@ -185,6 +185,91 @@ with st.sidebar:
     )
 
 # ──────────────────────────────────────────────
+# CRM AI helpers (Phase 0.4B) — defined at module level
+# ──────────────────────────────────────────────
+CRM_SYSTEM_PROMPT = (
+    "You are a professional foreign trade sales assistant. "
+    "Generate concise and professional English customer replies. "
+    "Avoid hallucination. "
+    "If information is missing, ask politely for clarification. "
+    "Keep replies business-friendly."
+)
+
+
+def _call_openai(api_key: str, model: str, user_message: str) -> str:
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": CRM_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        timeout=30,
+    )
+    return response.choices[0].message.content or ""
+
+
+def _call_claude(api_key: str, model: str, user_message: str) -> str:
+    import anthropic
+    client = anthropic.Anthropic(api_key=api_key)
+    response = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=CRM_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+        timeout=30,
+    )
+    return response.content[0].text if response.content else ""
+
+
+def _generate_ai_reply(provider: str, api_key: str, model: str, message: str) -> str:
+    if provider == "OpenAI":
+        return _call_openai(api_key, model, message)
+    return _call_claude(api_key, model, message)
+
+
+def _generate_template_reply(msg: str) -> str:
+    m = msg.lower()
+    if "moq" in m:
+        body = (
+            "Regarding your enquiry on MOQ, our minimum order quantity varies by product model. "
+            "Kindly share the specific model number and required quantity so we can provide "
+            "you with an accurate confirmation."
+        )
+    elif "delivery" in m or "lead time" in m:
+        body = (
+            "Our standard lead time is 15-20 working days after order confirmation and deposit receipt. "
+            "For urgent orders, please let us know your required delivery date and we will advise "
+            "on available options."
+        )
+    elif "shipping" in m or "freight" in m:
+        body = (
+            "We ship via sea freight (FCL/LCL) and air freight depending on order volume and urgency. "
+            "Shipping terms are typically FOB or CIF. Please advise your destination port and "
+            "preferred Incoterms so we can prepare a shipping quotation."
+        )
+    elif "payment" in m or "terms" in m:
+        body = (
+            "Our standard payment terms are 30% T/T deposit upon order confirmation, "
+            "with the remaining 70% T/T before shipment. "
+            "For established clients, we may offer extended terms subject to credit review."
+        )
+    else:
+        body = (
+            "Thank you for reaching out. We have received your enquiry and our sales team "
+            "will review the details and respond with a full quotation within 1 business day. "
+            "Please feel free to share any additional specifications or requirements."
+        )
+    return (
+        "Dear Customer,\n\n"
+        "Thank you for your inquiry.\n\n"
+        + body
+        + "\n\nBest regards,\nSales Team"
+    )
+
+
+# ──────────────────────────────────────────────
 # Page: Home
 # ──────────────────────────────────────────────
 if page == L["nav_home"]:
@@ -294,55 +379,64 @@ elif page == L["nav_ai"]:
     st.title(L["nav_ai"])
 
     st.warning(
-        "API keys are not stored in this demo version. "
-        "Production version will store encrypted keys in a secure backend."
+        "API keys are stored in session memory only. "
+        "Keys are never written to disk, logged, or committed. "
+        "Session is cleared when the browser tab is closed."
     )
     st.info(
         "Client-owned API key is recommended to avoid mixed Token billing. "
         "Buildway-managed AI usage can be provided as a paid add-on."
     )
 
+    # Provider selection (outside form so model list updates immediately)
     provider = st.selectbox(
         L["ai_provider"],
-        ["OpenAI", "Claude / Anthropic", "DeepSeek", "Gemini", "Custom OpenAI-Compatible API"],
+        ["OpenAI", "Claude / Anthropic"],
+        index=0,
+        key="ai_provider_select",
     )
 
+    OPENAI_MODELS = ["gpt-4o-mini", "gpt-4.1-mini"]
+    CLAUDE_MODELS = ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
+
     with st.form("ai_model_form"):
-        model_name = st.text_input(
-            L["model_name"],
-            value={
-                "OpenAI": "gpt-4o",
-                "Claude / Anthropic": "claude-3-5-sonnet-20241022",
-                "DeepSeek": "deepseek-chat",
-                "Gemini": "gemini-1.5-pro",
-                "Custom OpenAI-Compatible API": "your-model-name",
-            }.get(provider, ""),
-        )
-        api_key = st.text_input(
-            f"{provider} {L['api_key']}",
-            type="password",
-            placeholder="sk-... (never stored or committed)",
-        )
-        if provider == "Custom OpenAI-Compatible API":
-            base_url = st.text_input(
-                L["base_url"],
-                placeholder="https://your-api-endpoint.com/v1",
+        if provider == "OpenAI":
+            model_name = st.selectbox(L["model_name"], OPENAI_MODELS)
+            api_key_input = st.text_input(
+                "OpenAI API Key",
+                type="password",
+                placeholder="sk-... (session only, never stored)",
             )
+        else:
+            model_name = st.selectbox(L["model_name"], CLAUDE_MODELS)
+            api_key_input = st.text_input(
+                "Anthropic API Key",
+                type="password",
+                placeholder="sk-ant-... (session only, never stored)",
+            )
+
         save_ai = st.form_submit_button(L["save_ai"])
 
     if save_ai:
-        if api_key:
+        if api_key_input:
+            # Store in session_state — never written to disk
+            st.session_state["ai_provider"] = provider
+            st.session_state["ai_model"] = model_name
+            st.session_state["ai_api_key"] = api_key_input
             st.success(f"{provider} configured — model: `{model_name}`")
-            st.caption("Key accepted (demo only — not stored anywhere).")
+            st.caption("Key stored in session memory only. Not saved to disk or database.")
         else:
-            st.error(f"{L['api_key']} is required.")
+            st.error("API Key is required.")
 
     st.divider()
-    c1, c2 = st.columns(2)
+    configured = "ai_api_key" in st.session_state and st.session_state["ai_api_key"]
+    c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric(L["ai_provider"], provider)
+        st.metric(L["ai_provider"], st.session_state.get("ai_provider", "Not set"))
     with c2:
-        st.metric("Status", "Not configured")
+        st.metric(L["model_name"], st.session_state.get("ai_model", "Not set"))
+    with c3:
+        st.metric("Status", "Ready" if configured else "Not configured")
 
 # ──────────────────────────────────────────────
 # Page: Database Setup
@@ -497,53 +591,15 @@ elif page == L["nav_kb"]:
         st.caption("In Phase 1, files will be chunked and indexed into Qdrant per tenant_id.")
 
 # ──────────────────────────────────────────────
-# Page: CRM Demo  (Phase 0.4A — AI Reply Workflow)
+# Page: CRM Demo  (Phase 0.4B — Real AI API)
 # ──────────────────────────────────────────────
 elif page == L["nav_crm"]:
-
-    # ── Template-based fake AI reply ─────────────
-    def _generate_fake_reply(msg: str) -> str:
-        m = msg.lower()
-        if "moq" in m:
-            body = (
-                "Regarding your enquiry on MOQ, our minimum order quantity varies by product model. "
-                "Kindly share the specific model number and required quantity so we can provide "
-                "you with an accurate confirmation."
-            )
-        elif "delivery" in m or "lead time" in m:
-            body = (
-                "Our standard lead time is 15-20 working days after order confirmation and deposit receipt. "
-                "For urgent orders, please let us know your required delivery date and we will advise "
-                "on available options."
-            )
-        elif "shipping" in m or "freight" in m:
-            body = (
-                "We ship via sea freight (FCL/LCL) and air freight depending on order volume and urgency. "
-                "Shipping terms are typically FOB or CIF. Please advise your destination port and "
-                "preferred Incoterms so we can prepare a shipping quotation."
-            )
-        elif "payment" in m or "terms" in m:
-            body = (
-                "Our standard payment terms are 30% T/T deposit upon order confirmation, "
-                "with the remaining 70% T/T before shipment. "
-                "For established clients, we may offer extended terms subject to credit review."
-            )
-        else:
-            body = (
-                "Thank you for reaching out. We have received your enquiry and our sales team "
-                "will review the details and respond with a full quotation within 1 business day. "
-                "Please feel free to share any additional specifications or requirements."
-            )
-        return (
-            "Dear Customer,\n\n"
-            "Thank you for your inquiry.\n\n"
-            + body
-            + "\n\nBest regards,\nSales Team"
-        )
 
     # ── Session state init ────────────────────────
     if "crm_reply" not in st.session_state:
         st.session_state["crm_reply"] = ""
+    if "crm_reply_source" not in st.session_state:
+        st.session_state["crm_reply_source"] = ""
     if "crm_message" not in st.session_state:
         st.session_state["crm_message"] = "Hi, what is your MOQ and delivery time?"
 
@@ -551,6 +607,19 @@ elif page == L["nav_crm"]:
     st.caption(
         "Tenant: Demo Trading Company  |  Industry: Foreign Trade  |  Channel: WhatsApp"
     )
+
+    # ── AI status banner ──────────────────────────
+    ai_configured = bool(st.session_state.get("ai_api_key"))
+    if ai_configured:
+        st.success(
+            f"AI Model ready: **{st.session_state.get('ai_provider')}** — "
+            f"`{st.session_state.get('ai_model')}`"
+        )
+    else:
+        st.warning(
+            "AI Model not configured. Go to **AI Model 設定** to enter your API key. "
+            "Template reply will be used as fallback."
+        )
 
     # ── Customer message input ────────────────────
     st.subheader("Customer Message")
@@ -572,15 +641,46 @@ elif page == L["nav_crm"]:
 
     if clear_clicked:
         st.session_state["crm_reply"] = ""
+        st.session_state["crm_reply_source"] = ""
         st.session_state["crm_message"] = ""
         st.rerun()
 
     if generate_clicked:
-        if customer_input.strip():
-            st.session_state["crm_message"] = customer_input
-            st.session_state["crm_reply"] = _generate_fake_reply(customer_input)
-        else:
+        if not customer_input.strip():
             st.warning("Please enter a customer message before generating.")
+        else:
+            st.session_state["crm_message"] = customer_input
+            if ai_configured:
+                with st.spinner("Generating AI draft..."):
+                    try:
+                        reply = _generate_ai_reply(
+                            provider=st.session_state["ai_provider"],
+                            api_key=st.session_state["ai_api_key"],
+                            model=st.session_state["ai_model"],
+                            message=customer_input,
+                        )
+                        if reply:
+                            st.session_state["crm_reply"] = reply
+                            st.session_state["crm_reply_source"] = (
+                                f"{st.session_state['ai_provider']} / "
+                                f"{st.session_state['ai_model']}"
+                            )
+                        else:
+                            st.error("AI returned an empty response. Please try again.")
+                    except Exception as e:
+                        err = str(e)
+                        if "api_key" in err.lower() or "authentication" in err.lower() or "401" in err:
+                            st.error("Invalid API key. Please check your key in AI Model 設定.")
+                        elif "timeout" in err.lower() or "timed out" in err.lower():
+                            st.error("Request timed out. Please try again.")
+                        elif "rate" in err.lower():
+                            st.error("Rate limit reached. Please wait a moment and try again.")
+                        else:
+                            st.error(f"AI API error: {err}")
+            else:
+                # Fallback to template reply
+                st.session_state["crm_reply"] = _generate_template_reply(customer_input)
+                st.session_state["crm_reply_source"] = "Template (no API key)"
 
     # ── Draft reply output panel ──────────────────
     if st.session_state["crm_reply"]:
@@ -598,18 +698,11 @@ elif page == L["nav_crm"]:
 
         action_col1, action_col2 = st.columns(2)
         with action_col1:
-            st.button("Draft Reply", disabled=True, use_container_width=True)
+            src = st.session_state.get("crm_reply_source", "")
+            st.caption(f"Source: {src}" if src else "")
         with action_col2:
             if st.button("Copy Reply", use_container_width=True):
-                st.toast(
-                    "Reply copied (browser clipboard requires Phase 0.4B JS integration)."
-                )
-
-        st.caption(
-            "Phase 0.4A: Template-based reply. "
-            "Real AI reply via OpenAI / Claude will be enabled in Phase 0.4B "
-            "once API key is configured in AI Model Setup."
-        )
+                st.toast("Reply copied (browser clipboard integration coming in Phase 0.5).")
 
     st.divider()
 

@@ -18,8 +18,10 @@ from core.agents.provider_router import (
     AVAILABLE_PROVIDERS,
     COMING_SOON_MESSAGE,
     COMING_SOON_PROVIDERS,
+    ConnectionResult,
     CONNECTION_REQUIRED_MESSAGE,
     CRM_PROVIDER_UNAVAILABLE_MESSAGE,
+    OpenAICompatibleRequestError,
     PROVIDER_KEY_LABELS,
     PROVIDER_KEY_PLACEHOLDERS,
     PROVIDER_MODELS,
@@ -27,16 +29,19 @@ from core.agents.provider_router import (
     STATUS_CONFIGURED,
     STATUS_CONNECTED,
     STATUS_COMING_SOON,
+    STATUS_FAILED,
     STATUS_NOT_CONFIGURED,
     STATUS_NOT_SUPPORTED,
     SUPPORTED_PROVIDERS,
-    generate_reply,
+    build_ai_request_debug,
+    call_ai_reply,
+    classify_error,
     get_default_model,
     is_provider_available,
     mask_sensitive_text,
     provider_requires_base_url,
     resolve_model,
-    test_connection,
+    validate_config,
 )
 
 st.set_page_config(
@@ -306,6 +311,20 @@ def _format_ai_api_error(exc: Exception) -> str:
     return f"Connection failed: {err}"
 
 
+def _show_ai_debug(debug) -> None:
+    st.caption("AI request debug")
+    st.json(
+        {
+            "function": debug.function_name,
+            "method": debug.method,
+            "final_endpoint": debug.final_endpoint,
+            "provider": debug.provider,
+            "model": debug.model,
+            "base_url": debug.base_url,
+        }
+    )
+
+
 # ──────────────────────────────────────────────
 # Page: Home
 # ──────────────────────────────────────────────
@@ -511,8 +530,36 @@ elif page == L["nav_ai"]:
                 st.caption("Run Test Connection before using this provider in CRM.")
 
     if test_ai and provider_config.configured:
+        debug = build_ai_request_debug(
+            provider_config.provider,
+            provider_config.model,
+            provider_config.base_url,
+        )
+        _show_ai_debug(debug)
+        validation_result = validate_config(provider_config)
         with st.spinner("Testing AI provider connection..."):
-            result = test_connection(provider_config)
+            if validation_result:
+                result = validation_result
+            else:
+                try:
+                    ai_result = call_ai_reply(
+                        provider=provider_config.provider,
+                        message="Reply with OK only.",
+                        api_key=provider_config.api_key,
+                        model=provider_config.model,
+                        base_url=provider_config.base_url,
+                        test_mode=True,
+                    )
+                    _show_ai_debug(ai_result.debug)
+                    result = (
+                        ConnectionResult(STATUS_CONNECTED, "Connection successful.")
+                        if "OK" in ai_result.content.upper() or ai_result.content.strip()
+                        else ConnectionResult(STATUS_FAILED, "Connection failed: empty response")
+                    )
+                except OpenAICompatibleRequestError as exc:
+                    result = exc.result
+                except Exception as exc:
+                    result = classify_error(exc)
         st.session_state["ai_provider_configs"][provider]["connection_status"] = result.status
         provider_config = _sync_selected_ai_config(provider)
         if result.status == STATUS_CONNECTED:
@@ -764,13 +811,25 @@ elif page == L["nav_crm"]:
             st.session_state["crm_message"] = customer_input
             selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
             if selected_config.connection_status == STATUS_CONNECTED:
+                _show_ai_debug(
+                    build_ai_request_debug(
+                        selected_config.provider,
+                        selected_config.model,
+                        selected_config.base_url,
+                    )
+                )
                 with st.spinner("Generating AI draft..."):
                     try:
-                        reply = generate_reply(
-                            config=selected_config,
+                        ai_result = call_ai_reply(
+                            provider=selected_config.provider,
+                            message=customer_input,
+                            api_key=selected_config.api_key,
+                            model=selected_config.model,
+                            base_url=selected_config.base_url,
                             system_prompt=CRM_SYSTEM_PROMPT,
-                            user_message=customer_input,
                         )
+                        _show_ai_debug(ai_result.debug)
+                        reply = ai_result.content
                         if reply:
                             st.session_state["crm_reply"] = reply
                             st.session_state["crm_reply_source"] = (

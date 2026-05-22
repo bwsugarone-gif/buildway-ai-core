@@ -5,9 +5,9 @@ from urllib import error
 
 from core.ai.provider_router import (
     AIProviderConfig,
-    COMING_SOON_MESSAGE,
     CONNECTION_REQUIRED_MESSAGE,
     CRM_PROVIDER_UNAVAILABLE_MESSAGE,
+    OpenAICompatibleRequestError,
     PROVIDER_CLAUDE,
     PROVIDER_GEMINI,
     PROVIDER_OPENAI,
@@ -16,14 +16,14 @@ from core.ai.provider_router import (
     STATUS_COMING_SOON,
     STATUS_CONNECTED,
     STATUS_NOT_CONFIGURED,
-    STATUS_NOT_SUPPORTED,
     SUPPORTED_PROVIDERS,
+    call_ai_reply,
     generate_reply,
     is_provider_integrated,
     normalize_openai_compatible_base_url,
     provider_requires_base_url,
     request,
-    test_connection,
+    validate_config,
 )
 
 
@@ -129,17 +129,18 @@ def test_openai_compatible_requires_base_url_to_be_configured():
 
 
 def test_non_openai_connection_returns_coming_soon_without_sdk_call():
-    config = AIProviderConfig(
-        provider=PROVIDER_CLAUDE,
-        model="claude-haiku-4.5",
-        api_key="test-key",
-        connection_status=STATUS_CONFIGURED,
-    )
-
-    result = test_connection(config)
-
-    assert result.status == STATUS_COMING_SOON
-    assert result.message == COMING_SOON_MESSAGE
+    try:
+        call_ai_reply(
+            provider=PROVIDER_CLAUDE,
+            message="Reply with OK only.",
+            api_key="test-key",
+            model="claude-haiku-4.5",
+            test_mode=True,
+        )
+    except NotImplementedError as exc:
+        assert str(exc) == CRM_PROVIDER_UNAVAILABLE_MESSAGE
+    else:
+        raise AssertionError("Expected coming-soon provider to be unavailable")
 
 
 def test_non_openai_generation_returns_demo_unavailable_message():
@@ -183,7 +184,7 @@ def test_missing_openai_compatible_base_url_is_friendly_error():
         connection_status=STATUS_CONFIGURED,
     )
 
-    result = test_connection(config)
+    result = validate_config(config)
 
     assert result.status == STATUS_NOT_CONFIGURED
     assert result.message == "Missing Base URL"
@@ -208,7 +209,7 @@ def test_openai_compatible_base_url_normalization():
     )
 
 
-def test_openai_test_connection_success_uses_real_route():
+def test_openai_call_ai_reply_test_mode_success_uses_real_route():
     _install_fake_openai()
     config = AIProviderConfig(
         provider=PROVIDER_OPENAI,
@@ -217,13 +218,21 @@ def test_openai_test_connection_success_uses_real_route():
         connection_status=STATUS_CONFIGURED,
     )
 
-    result = test_connection(config)
+    result = call_ai_reply(
+        provider=config.provider,
+        message="Reply with OK only.",
+        api_key=config.api_key,
+        model=config.model,
+        test_mode=True,
+    )
 
-    assert result.status == STATUS_CONNECTED
+    assert result.content == "OK"
+    assert result.debug.function_name == "call_ai_reply"
+    assert result.debug.method == "POST"
     assert _FakeOpenAI.calls[-1] == {"api_key": "test-key", "timeout": 30}
 
 
-def test_openai_compatible_test_connection_success_uses_base_url():
+def test_openai_compatible_call_ai_reply_test_mode_success_uses_base_url():
     calls, original_urlopen = _install_fake_urlopen()
     config = AIProviderConfig(
         provider=PROVIDER_OPENAI_COMPATIBLE,
@@ -234,17 +243,26 @@ def test_openai_compatible_test_connection_success_uses_base_url():
     )
 
     try:
-        result = test_connection(config)
+        result = call_ai_reply(
+            provider=config.provider,
+            message="Reply with OK only.",
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            test_mode=True,
+        )
     finally:
         request.urlopen = original_urlopen
 
-    assert result.status == STATUS_CONNECTED
+    assert result.content == "OK"
+    assert result.debug.function_name == "call_ai_reply"
+    assert result.debug.final_endpoint == "https://api.example.com/v1/chat/completions"
     assert calls[-1]["url"] == "https://api.example.com/v1/chat/completions"
     assert calls[-1]["method"] == "POST"
     assert '"model": "custom-openai-compatible-model"' in calls[-1]["body"]
 
 
-def test_openai_compatible_test_connection_appends_v1_and_posts():
+def test_openai_compatible_call_ai_reply_appends_v1_and_posts():
     calls, original_urlopen = _install_fake_urlopen()
     config = AIProviderConfig(
         provider=PROVIDER_OPENAI_COMPATIBLE,
@@ -255,11 +273,18 @@ def test_openai_compatible_test_connection_appends_v1_and_posts():
     )
 
     try:
-        result = test_connection(config)
+        result = call_ai_reply(
+            provider=config.provider,
+            message="Reply with OK only.",
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            test_mode=True,
+        )
     finally:
         request.urlopen = original_urlopen
 
-    assert result.status == STATUS_CONNECTED
+    assert result.content == "OK"
     assert calls[-1]["url"] == "http://pro.mmw.ink/v1/chat/completions"
     assert calls[-1]["method"] == "POST"
 
@@ -275,11 +300,18 @@ def test_openai_compatible_real_world_model_posts_without_get():
     )
 
     try:
-        result = test_connection(config)
+        result = call_ai_reply(
+            provider=config.provider,
+            message="Reply with OK only.",
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            test_mode=True,
+        )
     finally:
         request.urlopen = original_urlopen
 
-    assert result.status == STATUS_CONNECTED
+    assert result.content == "OK"
     assert calls[-1]["url"] == "http://pro.mmw.ink/v1/chat/completions"
     assert calls[-1]["method"] == "POST"
     assert calls[-1]["method"] != "GET"
@@ -330,7 +362,16 @@ def test_openai_compatible_invalid_key_error_masks_key_and_shows_endpoint():
     )
 
     try:
-        result = test_connection(config)
+        call_ai_reply(
+            provider=config.provider,
+            message="Reply with OK only.",
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            test_mode=True,
+        )
+    except OpenAICompatibleRequestError as exc:
+        result = exc.result
     finally:
         request.urlopen = original_urlopen
 

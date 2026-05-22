@@ -121,6 +121,22 @@ class ConnectionResult:
     message: str
 
 
+@dataclass
+class AIRequestDebug:
+    function_name: str
+    method: str
+    final_endpoint: str
+    provider: str
+    model: str
+    base_url: str
+
+
+@dataclass
+class AIReplyResult:
+    content: str
+    debug: AIRequestDebug
+
+
 class OpenAICompatibleRequestError(RuntimeError):
     def __init__(self, result: ConnectionResult):
         super().__init__(result.message)
@@ -140,6 +156,24 @@ def normalize_openai_compatible_base_url(base_url: str) -> str:
     if normalized.endswith("/v1"):
         return normalized
     return f"{normalized}/v1"
+
+
+def build_ai_request_debug(provider: str, model: str, base_url: str = "") -> AIRequestDebug:
+    if provider == PROVIDER_OPENAI_COMPATIBLE:
+        normalized_base_url = normalize_openai_compatible_base_url(base_url)
+        final_endpoint = f"{normalized_base_url}/chat/completions"
+        debug_base_url = normalized_base_url
+    else:
+        final_endpoint = "OpenAI SDK chat.completions.create"
+        debug_base_url = ""
+    return AIRequestDebug(
+        function_name="call_ai_reply",
+        method="POST",
+        final_endpoint=final_endpoint,
+        provider=provider,
+        model=model,
+        base_url=debug_base_url,
+    )
 
 
 def is_provider_integrated(provider: str) -> bool:
@@ -205,7 +239,8 @@ def call_openai_compatible_chat(
     messages: list[dict[str, str]],
     temperature: float,
     max_tokens: int | None = None,
-) -> str:
+) -> AIReplyResult:
+    debug = build_ai_request_debug(PROVIDER_OPENAI_COMPATIBLE, model, base_url)
     normalized_base_url = normalize_openai_compatible_base_url(base_url)
     endpoint = f"{normalized_base_url}/chat/completions"
     payload = {
@@ -236,9 +271,9 @@ def call_openai_compatible_chat(
     parsed = json.loads(raw_body)
     choices = parsed.get("choices", [])
     if not choices:
-        return ""
+        return AIReplyResult("", debug)
     message = choices[0].get("message", {})
-    return message.get("content", "") or ""
+    return AIReplyResult(message.get("content", "") or "", debug)
 
 
 def validate_config(config: AIProviderConfig) -> ConnectionResult | None:
@@ -251,46 +286,51 @@ def validate_config(config: AIProviderConfig) -> ConnectionResult | None:
     return None
 
 
-def test_connection(config: AIProviderConfig) -> ConnectionResult:
-    validation_error = validate_config(config)
-    if validation_error:
-        return validation_error
-    if not is_provider_available(config.provider):
-        return ConnectionResult(STATUS_COMING_SOON, COMING_SOON_MESSAGE)
-
-    try:
-        if config.provider == PROVIDER_OPENAI_COMPATIBLE:
-            try:
-                content = call_openai_compatible_chat(
-                    base_url=config.base_url,
-                    api_key=config.api_key,
-                    model=config.model,
-                    messages=[{"role": "user", "content": "Reply with OK only."}],
-                    temperature=0,
-                    max_tokens=8,
-                )
-            except OpenAICompatibleRequestError as exc:
-                return exc.result
-            if "OK" in content.upper() or content.strip():
-                return ConnectionResult(STATUS_CONNECTED, "Connection successful.")
-            return ConnectionResult(STATUS_FAILED, "Connection failed: empty response")
-
-        from openai import OpenAI
-
-        client_kwargs = {"api_key": config.api_key, "timeout": 30}
-        client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=config.model,
-            messages=[{"role": "user", "content": "Reply with OK only."}],
-            temperature=0,
-            max_tokens=8,
+def call_ai_reply(
+    *,
+    provider: str,
+    message: str,
+    api_key: str,
+    model: str,
+    base_url: str = "",
+    system_prompt: str = "",
+    test_mode: bool = False,
+) -> AIReplyResult:
+    if not is_provider_available(provider):
+        raise NotImplementedError(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
+    if provider == PROVIDER_OPENAI_COMPATIBLE:
+        return call_openai_compatible_chat(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=[
+                *([{"role": "system", "content": system_prompt}] if system_prompt and not test_mode else []),
+                {"role": "user", "content": message},
+            ],
+            temperature=0 if test_mode else 0.7,
+            max_tokens=8 if test_mode else None,
         )
-        content = response.choices[0].message.content or ""
-        if "OK" in content.upper() or content.strip():
-            return ConnectionResult(STATUS_CONNECTED, "Connection successful.")
-        return ConnectionResult(STATUS_FAILED, "Connection failed: empty response")
-    except Exception as exc:
-        return classify_error(exc)
+
+    from openai import OpenAI
+
+    client_kwargs = {"api_key": api_key, "timeout": 30}
+    client = OpenAI(**client_kwargs)
+    request_kwargs = {
+        "model": model,
+        "messages": [
+            *([{"role": "system", "content": system_prompt}] if system_prompt and not test_mode else []),
+            {"role": "user", "content": message},
+        ],
+        "temperature": 0 if test_mode else 0.7,
+        "presence_penalty": 0 if test_mode else 0.2,
+    }
+    if test_mode:
+        request_kwargs["max_tokens"] = 8
+    response = client.chat.completions.create(**request_kwargs)
+    return AIReplyResult(
+        response.choices[0].message.content or "",
+        build_ai_request_debug(provider, model, base_url),
+    )
 
 
 def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: str) -> str:
@@ -298,30 +338,11 @@ def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: s
         raise NotImplementedError(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
     if config.connection_status != STATUS_CONNECTED:
         raise RuntimeError(CONNECTION_REQUIRED_MESSAGE)
-
-    from openai import OpenAI
-
-    if config.provider == PROVIDER_OPENAI_COMPATIBLE:
-        return call_openai_compatible_chat(
-            base_url=config.base_url,
-            api_key=config.api_key,
-            model=config.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.7,
-        )
-
-    client_kwargs = {"api_key": config.api_key, "timeout": 30}
-    client = OpenAI(**client_kwargs)
-    response = client.chat.completions.create(
+    return call_ai_reply(
+        provider=config.provider,
+        message=user_message,
+        api_key=config.api_key,
         model=config.model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.7,
-        presence_penalty=0.2,
-    )
-    return response.choices[0].message.content or ""
+        base_url=config.base_url,
+        system_prompt=system_prompt,
+    ).content

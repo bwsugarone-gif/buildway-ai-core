@@ -221,6 +221,14 @@ with st.sidebar:
         ],
         label_visibility="collapsed",
     )
+    
+    st.divider()
+    
+    # Developer Mode Toggle
+    dev_mode = st.checkbox("Developer Mode", value=False)
+    st.session_state["dev_mode"] = dev_mode
+    if dev_mode:
+        st.caption("🔧 Debug mode enabled")
 
 # ──────────────────────────────────────────────
 # CRM AI helpers (Phase 0.4B) — defined at module level
@@ -326,16 +334,51 @@ def _format_ai_api_error(exc: Exception) -> str:
 
 
 def _show_ai_debug(debug) -> None:
-    st.caption("AI request debug")
-    debug_data = {
-        "function": debug.function_name,
-        "method": debug.method,
-        "final_endpoint": debug.final_endpoint,
-        "provider": debug.provider,
-        "model": debug.model,
-        "sdk_or_api": debug.sdk_or_api,
-    }
-    st.json(debug_data)
+    """Only show debug in developer mode."""
+    if not st.session_state.get("dev_mode", False):
+        return
+    
+    with st.expander("🔧 Developer Debug", expanded=False):
+        st.caption("AI request debug")
+        debug_data = {
+            "function": debug.function_name,
+            "method": debug.method,
+            "final_endpoint": debug.final_endpoint,
+            "provider": debug.provider,
+            "model": debug.model,
+            "sdk_or_api": debug.sdk_or_api,
+        }
+        st.json(debug_data)
+
+
+def _calculate_confidence_fallback(results: list) -> str:
+    """
+    Fallback confidence calculation if retriever method unavailable.
+    
+    Args:
+        results: Search results from RAG retriever.
+    
+    Returns:
+        "HIGH", "MEDIUM", or "LOW"
+    """
+    if not results:
+        return "LOW"
+    
+    # Get similarity from first result
+    top_result = results[0]
+    
+    # Try to get similarity, or calculate from distance
+    similarity = top_result.get('similarity')
+    if similarity is None:
+        distance = top_result.get('distance', 1.0)
+        similarity = 1.0 - (distance / 2.0)  # ChromaDB cosine distance normalization
+    
+    if similarity >= 0.85:
+        return "HIGH"
+    elif similarity >= 0.65:
+        return "MEDIUM"
+    else:
+        return "LOW"
 
 
 # ──────────────────────────────────────────────
@@ -1019,11 +1062,23 @@ elif page == L["nav_crm"]:
                                     kb_used = True
                                     kb_results = results  # Store for display
                                     
-                                    # Calculate confidence
-                                    confidence_level = retriever.calculate_confidence(results)
+                                    # Calculate confidence with fallback
+                                    try:
+                                        if hasattr(retriever, 'calculate_confidence'):
+                                            confidence_level = retriever.calculate_confidence(results)
+                                        else:
+                                            confidence_level = _calculate_confidence_fallback(results)
+                                    except Exception:
+                                        confidence_level = _calculate_confidence_fallback(results)
                                     
-                                    # Detect conflicts
-                                    conflict_warning = retriever.detect_conflicts(results, customer_input)
+                                    # Detect conflicts with fallback
+                                    try:
+                                        if hasattr(retriever, 'detect_conflicts'):
+                                            conflict_warning = retriever.detect_conflicts(results, customer_input)
+                                        else:
+                                            conflict_warning = None
+                                    except Exception:
+                                        conflict_warning = None
                                     
                                     # Build context
                                     context_parts = []

@@ -742,11 +742,11 @@ elif page == L["nav_kb"]:
     
     # Upload Section
     st.subheader("Upload Documents")
-    st.caption("Supported formats: PDF, TXT, DOCX, MD")
+    st.caption("Supported formats: PDF, TXT, DOCX, MD, CSV")
     
     uploaded_files = st.file_uploader(
         "Upload Knowledge Base Documents",
-        type=["pdf", "txt", "docx", "md"],
+        type=["pdf", "txt", "docx", "md", "csv"],
         accept_multiple_files=True,
         key="kb_uploader",
     )

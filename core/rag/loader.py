@@ -44,6 +44,44 @@ def load_docx_file(file_path: Path) -> str:
     return "\n\n".join(text_parts)
 
 
+def load_csv_file(file_path: Path) -> str:
+    """
+    Load CSV file using pandas and convert to text format.
+    Each row is converted to "column_name: value" format.
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError("pandas is required for CSV loading. Install: pip install pandas")
+    
+    try:
+        # Try UTF-8 first, then fallback to other encodings
+        try:
+            df = pd.read_csv(file_path, encoding="utf-8")
+        except UnicodeDecodeError:
+            df = pd.read_csv(file_path, encoding="gbk", errors="replace")
+    except pd.errors.EmptyDataError:
+        raise ValueError(f"CSV file is empty: {file_path}")
+    except Exception as e:
+        raise ValueError(f"Failed to parse CSV file: {e}")
+    
+    if df.empty:
+        raise ValueError(f"CSV file contains no data: {file_path}")
+    
+    # Convert each row to text format
+    text_parts = []
+    for idx, row in df.iterrows():
+        row_text_parts = []
+        for col_name, value in row.items():
+            # Skip NaN values
+            if pd.notna(value):
+                row_text_parts.append(f"{col_name}: {value}")
+        if row_text_parts:
+            text_parts.append("\n".join(row_text_parts))
+    
+    return "\n\n---\n\n".join(text_parts)
+
+
 def load_document(file_path: Path) -> str:
     """
     Load document and extract text based on file extension.
@@ -69,10 +107,12 @@ def load_document(file_path: Path) -> str:
         return load_pdf_file(file_path)
     elif ext == ".docx":
         return load_docx_file(file_path)
+    elif ext == ".csv":
+        return load_csv_file(file_path)
     else:
         raise ValueError(f"Unsupported file format: {ext}")
 
 
 def is_supported_format(file_path: Path) -> bool:
     """Check if file format is supported."""
-    return file_path.suffix.lower() in {".txt", ".md", ".pdf", ".docx"}
+    return file_path.suffix.lower() in {".txt", ".md", ".pdf", ".docx", ".csv"}

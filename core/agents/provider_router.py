@@ -91,6 +91,7 @@ PROVIDER_KEY_PLACEHOLDERS = {
     PROVIDER_OPENAI_COMPATIBLE: "Provider API key (session only, never stored)",
 }
 
+DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH = "/chat/completions"
 COMING_SOON_MESSAGE = "This provider is listed for future support and cannot be used in CRM yet."
 CRM_PROVIDER_UNAVAILABLE_MESSAGE = (
     "This provider is not available in this demo. Please use OpenAI or OpenAI-Compatible."
@@ -104,6 +105,7 @@ class AIProviderConfig:
     model: str
     api_key: str = ""
     base_url: str = ""
+    endpoint_path: str = DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH
     connection_status: str = STATUS_NOT_CONFIGURED
 
     @property
@@ -129,6 +131,7 @@ class AIRequestDebug:
     provider: str
     model: str
     base_url: str
+    endpoint_path: str
 
 
 @dataclass
@@ -158,14 +161,30 @@ def normalize_openai_compatible_base_url(base_url: str) -> str:
     return f"{normalized}/v1"
 
 
-def build_ai_request_debug(provider: str, model: str, base_url: str = "") -> AIRequestDebug:
+def normalize_openai_compatible_endpoint_path(endpoint_path: str) -> str:
+    normalized = (endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH).strip()
+    if not normalized.startswith("/"):
+        raise ValueError("Endpoint Path must start with /")
+    if re.search(r"(sk-[A-Za-z0-9_\-]+|sk-ant-[A-Za-z0-9_\-]+|AIza[A-Za-z0-9_\-]+)", normalized):
+        raise ValueError("Endpoint Path must not contain an API key")
+    return normalized
+
+
+def build_ai_request_debug(
+    provider: str,
+    model: str,
+    base_url: str = "",
+    endpoint_path: str = DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
+) -> AIRequestDebug:
     if provider == PROVIDER_OPENAI_COMPATIBLE:
         normalized_base_url = normalize_openai_compatible_base_url(base_url)
-        final_endpoint = f"{normalized_base_url}/chat/completions"
+        normalized_endpoint_path = normalize_openai_compatible_endpoint_path(endpoint_path)
+        final_endpoint = f"{normalized_base_url}{normalized_endpoint_path}"
         debug_base_url = normalized_base_url
     else:
         final_endpoint = "OpenAI SDK chat.completions.create"
         debug_base_url = ""
+        normalized_endpoint_path = ""
     return AIRequestDebug(
         function_name="call_ai_reply",
         method="POST",
@@ -173,6 +192,7 @@ def build_ai_request_debug(provider: str, model: str, base_url: str = "") -> AIR
         provider=provider,
         model=model,
         base_url=debug_base_url,
+        endpoint_path=normalized_endpoint_path,
     )
 
 
@@ -234,15 +254,17 @@ def _classify_openai_compatible_error(exc: Exception, endpoint: str) -> Connecti
 def call_openai_compatible_chat(
     *,
     base_url: str,
+    endpoint_path: str,
     api_key: str,
     model: str,
     messages: list[dict[str, str]],
     temperature: float,
     max_tokens: int | None = None,
 ) -> AIReplyResult:
-    debug = build_ai_request_debug(PROVIDER_OPENAI_COMPATIBLE, model, base_url)
+    debug = build_ai_request_debug(PROVIDER_OPENAI_COMPATIBLE, model, base_url, endpoint_path)
     normalized_base_url = normalize_openai_compatible_base_url(base_url)
-    endpoint = f"{normalized_base_url}/chat/completions"
+    normalized_endpoint_path = normalize_openai_compatible_endpoint_path(endpoint_path)
+    endpoint = f"{normalized_base_url}{normalized_endpoint_path}"
     payload = {
         "model": model,
         "messages": messages,
@@ -281,6 +303,11 @@ def validate_config(config: AIProviderConfig) -> ConnectionResult | None:
         return ConnectionResult(STATUS_NOT_CONFIGURED, "Missing API key")
     if provider_requires_base_url(config.provider) and not config.base_url:
         return ConnectionResult(STATUS_NOT_CONFIGURED, "Missing Base URL")
+    if provider_requires_base_url(config.provider):
+        try:
+            normalize_openai_compatible_endpoint_path(config.endpoint_path)
+        except ValueError as exc:
+            return ConnectionResult(STATUS_NOT_CONFIGURED, str(exc))
     if not config.model:
         return ConnectionResult(STATUS_NOT_CONFIGURED, "Missing Model Name")
     return None
@@ -293,6 +320,7 @@ def call_ai_reply(
     api_key: str,
     model: str,
     base_url: str = "",
+    endpoint_path: str = DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
     system_prompt: str = "",
     test_mode: bool = False,
 ) -> AIReplyResult:
@@ -301,6 +329,7 @@ def call_ai_reply(
     if provider == PROVIDER_OPENAI_COMPATIBLE:
         return call_openai_compatible_chat(
             base_url=base_url,
+            endpoint_path=endpoint_path,
             api_key=api_key,
             model=model,
             messages=[
@@ -329,7 +358,7 @@ def call_ai_reply(
     response = client.chat.completions.create(**request_kwargs)
     return AIReplyResult(
         response.choices[0].message.content or "",
-        build_ai_request_debug(provider, model, base_url),
+        build_ai_request_debug(provider, model, base_url, endpoint_path),
     )
 
 
@@ -344,5 +373,6 @@ def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: s
         api_key=config.api_key,
         model=config.model,
         base_url=config.base_url,
+        endpoint_path=config.endpoint_path,
         system_prompt=system_prompt,
     ).content

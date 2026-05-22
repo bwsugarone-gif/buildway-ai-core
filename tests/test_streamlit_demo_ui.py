@@ -25,6 +25,7 @@ def test_ai_setup_dynamic_provider_ui_and_crm_placeholder():
     assert [field.label for field in at.text_input] == [
         "Custom Model Name",
         "Base URL",
+        "Endpoint Path",
         "API Key",
     ]
 

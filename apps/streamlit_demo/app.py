@@ -21,6 +21,7 @@ from core.agents.provider_router import (
     ConnectionResult,
     CONNECTION_REQUIRED_MESSAGE,
     CRM_PROVIDER_UNAVAILABLE_MESSAGE,
+    DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
     OpenAICompatibleRequestError,
     PROVIDER_KEY_LABELS,
     PROVIDER_KEY_PLACEHOLDERS,
@@ -39,6 +40,7 @@ from core.agents.provider_router import (
     get_default_model,
     is_provider_available,
     mask_sensitive_text,
+    normalize_openai_compatible_endpoint_path,
     provider_requires_base_url,
     resolve_model,
     validate_config,
@@ -238,6 +240,7 @@ def _ensure_ai_state_defaults() -> None:
                 "custom_model": "",
                 "api_key": "",
                 "base_url": "",
+                "endpoint_path": DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
                 "connection_status": STATUS_NOT_CONFIGURED
                 if is_provider_available(provider)
                 else STATUS_COMING_SOON,
@@ -262,6 +265,10 @@ def _get_provider_config(provider: str) -> AIProviderConfig:
         ),
         api_key=raw_config.get("api_key", ""),
         base_url=raw_config.get("base_url", ""),
+        endpoint_path=raw_config.get(
+            "endpoint_path",
+            DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
+        ),
         connection_status=raw_config.get("connection_status", STATUS_NOT_CONFIGURED),
     )
 
@@ -272,6 +279,7 @@ def _sync_selected_ai_config(provider: str) -> AIProviderConfig:
     st.session_state["ai_model"] = config.model
     st.session_state["ai_api_key"] = config.api_key
     st.session_state["ai_base_url"] = config.base_url
+    st.session_state["ai_endpoint_path"] = config.endpoint_path
     st.session_state["ai_connection_status"] = config.connection_status
     st.session_state["ai_configured"] = config.connection_status != STATUS_NOT_CONFIGURED
     return config
@@ -286,6 +294,7 @@ def _reset_provider_config(provider: str) -> None:
         "resolved_model": default_model if default_model != "custom" else "",
         "api_key": "",
         "base_url": "",
+        "endpoint_path": DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
         "connection_status": STATUS_NOT_CONFIGURED
         if is_provider_available(provider)
         else STATUS_COMING_SOON,
@@ -321,6 +330,7 @@ def _show_ai_debug(debug) -> None:
             "provider": debug.provider,
             "model": debug.model,
             "base_url": debug.base_url,
+            "endpoint_path": debug.endpoint_path,
         }
     )
 
@@ -487,11 +497,17 @@ elif page == L["nav_ai"]:
                 disabled=not provider_available,
             )
         base_url_input = ""
+        endpoint_path_input = DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH
         if provider_requires_base_url(provider):
             base_url_input = st.text_input(
                 L["base_url"],
                 value=provider_config.base_url,
                 placeholder="https://api.example.com/v1",
+            )
+            endpoint_path_input = st.text_input(
+                "Endpoint Path",
+                value=provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
+                placeholder="/chat/completions",
             )
         api_key_input = st.text_input(
             PROVIDER_KEY_LABELS[provider],
@@ -505,11 +521,27 @@ elif page == L["nav_ai"]:
 
     next_api_key = api_key_input or provider_config.api_key
     next_base_url = base_url_input if provider_requires_base_url(provider) else ""
+    next_endpoint_path = (
+        endpoint_path_input
+        if provider_requires_base_url(provider)
+        else DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH
+    )
     resolved_model = resolve_model(model_name, custom_model_name)
 
     if save_ai or test_ai:
+        config_error = False
         if provider_requires_base_url(provider) and not next_base_url:
             st.error("Missing Base URL")
+            config_error = True
+        elif provider_requires_base_url(provider):
+            try:
+                next_endpoint_path = normalize_openai_compatible_endpoint_path(next_endpoint_path)
+            except ValueError as exc:
+                st.error(str(exc))
+                next_endpoint_path = ""
+                config_error = True
+        if config_error:
+            pass
         elif not next_api_key:
             st.error("Missing API key")
         elif not resolved_model:
@@ -522,6 +554,7 @@ elif page == L["nav_ai"]:
                 "resolved_model": resolved_model,
                 "api_key": next_api_key,
                 "base_url": next_base_url,
+                "endpoint_path": next_endpoint_path,
                 "connection_status": STATUS_CONFIGURED,
             }
             provider_config = _sync_selected_ai_config(provider)
@@ -534,6 +567,7 @@ elif page == L["nav_ai"]:
             provider_config.provider,
             provider_config.model,
             provider_config.base_url,
+            provider_config.endpoint_path,
         )
         _show_ai_debug(debug)
         validation_result = validate_config(provider_config)
@@ -548,6 +582,7 @@ elif page == L["nav_ai"]:
                         api_key=provider_config.api_key,
                         model=provider_config.model,
                         base_url=provider_config.base_url,
+                        endpoint_path=provider_config.endpoint_path,
                         test_mode=True,
                     )
                     _show_ai_debug(ai_result.debug)
@@ -582,6 +617,7 @@ elif page == L["nav_ai"]:
         st.metric("Connection Status", provider_config.connection_status)
     if provider_requires_base_url(provider):
         st.caption(f"Base URL: `{provider_config.base_url or 'Not set'}`")
+        st.caption(f"Endpoint Path: `{provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH}`")
 
 # ──────────────────────────────────────────────
 # Page: Database Setup
@@ -816,6 +852,7 @@ elif page == L["nav_crm"]:
                         selected_config.provider,
                         selected_config.model,
                         selected_config.base_url,
+                        selected_config.endpoint_path,
                     )
                 )
                 with st.spinner("Generating AI draft..."):
@@ -826,6 +863,7 @@ elif page == L["nav_crm"]:
                             api_key=selected_config.api_key,
                             model=selected_config.model,
                             base_url=selected_config.base_url,
+                            endpoint_path=selected_config.endpoint_path,
                             system_prompt=CRM_SYSTEM_PROMPT,
                         )
                         _show_ai_debug(ai_result.debug)

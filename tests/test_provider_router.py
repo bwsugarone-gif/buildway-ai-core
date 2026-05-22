@@ -7,6 +7,7 @@ from core.ai.provider_router import (
     AIProviderConfig,
     CONNECTION_REQUIRED_MESSAGE,
     CRM_PROVIDER_UNAVAILABLE_MESSAGE,
+    DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
     OpenAICompatibleRequestError,
     PROVIDER_CLAUDE,
     PROVIDER_GEMINI,
@@ -21,6 +22,7 @@ from core.ai.provider_router import (
     generate_reply,
     is_provider_integrated,
     normalize_openai_compatible_base_url,
+    normalize_openai_compatible_endpoint_path,
     provider_requires_base_url,
     request,
     validate_config,
@@ -209,6 +211,41 @@ def test_openai_compatible_base_url_normalization():
     )
 
 
+def test_openai_compatible_endpoint_path_normalization_and_validation():
+    assert normalize_openai_compatible_endpoint_path(" /chat/compl ") == "/chat/compl"
+    assert normalize_openai_compatible_endpoint_path("") == DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH
+
+    try:
+        normalize_openai_compatible_endpoint_path("chat/completions")
+    except ValueError as exc:
+        assert str(exc) == "Endpoint Path must start with /"
+    else:
+        raise AssertionError("Expected endpoint path without leading slash to fail")
+
+    try:
+        normalize_openai_compatible_endpoint_path("/chat/sk-test-secret-key")
+    except ValueError as exc:
+        assert str(exc) == "Endpoint Path must not contain an API key"
+    else:
+        raise AssertionError("Expected endpoint path containing API key to fail")
+
+
+def test_invalid_openai_compatible_endpoint_path_is_friendly_error():
+    config = AIProviderConfig(
+        provider=PROVIDER_OPENAI_COMPATIBLE,
+        model="custom-openai-compatible-model",
+        api_key="test-key",
+        base_url="http://pro.mmw.ink/v1",
+        endpoint_path="chat/completions",
+        connection_status=STATUS_CONFIGURED,
+    )
+
+    result = validate_config(config)
+
+    assert result.status == STATUS_NOT_CONFIGURED
+    assert result.message == "Endpoint Path must start with /"
+
+
 def test_openai_call_ai_reply_test_mode_success_uses_real_route():
     _install_fake_openai()
     config = AIProviderConfig(
@@ -286,6 +323,37 @@ def test_openai_compatible_call_ai_reply_appends_v1_and_posts():
 
     assert result.content == "OK"
     assert calls[-1]["url"] == "http://pro.mmw.ink/v1/chat/completions"
+    assert calls[-1]["method"] == "POST"
+
+
+def test_openai_compatible_call_ai_reply_uses_custom_endpoint_path():
+    calls, original_urlopen = _install_fake_urlopen()
+    config = AIProviderConfig(
+        provider=PROVIDER_OPENAI_COMPATIBLE,
+        model="[m1]claude-sonnet-4-6",
+        api_key="test-key",
+        base_url="http://pro.mmw.ink/v1",
+        endpoint_path="/chat/compl",
+        connection_status=STATUS_CONFIGURED,
+    )
+
+    try:
+        result = call_ai_reply(
+            provider=config.provider,
+            message="Reply with OK only.",
+            api_key=config.api_key,
+            model=config.model,
+            base_url=config.base_url,
+            endpoint_path=config.endpoint_path,
+            test_mode=True,
+        )
+    finally:
+        request.urlopen = original_urlopen
+
+    assert result.content == "OK"
+    assert result.debug.endpoint_path == "/chat/compl"
+    assert result.debug.final_endpoint == "http://pro.mmw.ink/v1/chat/compl"
+    assert calls[-1]["url"] == "http://pro.mmw.ink/v1/chat/compl"
     assert calls[-1]["method"] == "POST"
 
 

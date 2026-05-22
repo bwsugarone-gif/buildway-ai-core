@@ -752,40 +752,63 @@ elif page == L["nav_kb"]:
     )
     
     if uploaded_files and st.session_state.get("rag_initialized"):
-        if st.button("Index Uploaded Files", type="primary"):
+        if st.button("Index Uploaded Files", type="primary", key="index_files_btn"):
             from pathlib import Path
             import tempfile
+            import traceback
+            
+            st.write("🔄 Starting indexing workflow...")
+            st.write(f"📁 Files to process: {len(uploaded_files)}")
             
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            for i, uploaded_file in enumerate(uploaded_files):
-                try:
-                    status_text.text(f"Processing {uploaded_file.name}...")
-                    
-                    # Save to temp file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        tmp_path = Path(tmp_file.name)
-                    
-                    # Index document
-                    result = st.session_state["rag_retriever"].index_document(
-                        file_path=tmp_path,
-                        metadata={"source": "upload", "original_name": uploaded_file.name},
-                    )
-                    
-                    # Clean up temp file
-                    tmp_path.unlink()
-                    
-                    st.success(f"✓ {uploaded_file.name}: {result['chunk_count']} chunks indexed")
-                    
-                except Exception as e:
-                    st.error(f"✗ {uploaded_file.name}: {str(e)}")
-                
-                progress_bar.progress((i + 1) / len(uploaded_files))
+            indexed_count = 0
+            failed_count = 0
             
-            status_text.text("Indexing complete!")
-            st.rerun()
+            with st.spinner("Indexing documents..."):
+                for i, uploaded_file in enumerate(uploaded_files):
+                    try:
+                        st.write(f"📄 Indexing: **{uploaded_file.name}**")
+                        status_text.text(f"Processing {uploaded_file.name}...")
+                        
+                        # Save to temp file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+                            tmp_file.write(uploaded_file.getvalue())
+                            tmp_path = Path(tmp_file.name)
+                        
+                        st.write(f"  → Temp file: {tmp_path}")
+                        
+                        # Index document
+                        st.write(f"  → Calling index_document()...")
+                        result = st.session_state["rag_retriever"].index_document(
+                            file_path=tmp_path,
+                            metadata={"source": "upload", "original_name": uploaded_file.name},
+                        )
+                        
+                        st.write(f"  → Result: {result}")
+                        
+                        # Clean up temp file
+                        tmp_path.unlink()
+                        
+                        st.success(f"✓ {uploaded_file.name}: {result['chunk_count']} chunks indexed")
+                        indexed_count += 1
+                        
+                    except Exception as e:
+                        failed_count += 1
+                        error_detail = traceback.format_exc()
+                        st.error(f"✗ {uploaded_file.name}: {str(e)}")
+                        with st.expander("Error Details"):
+                            st.code(error_detail)
+                    
+                    progress_bar.progress((i + 1) / len(uploaded_files))
+                
+                status_text.text("Indexing complete!")
+                st.write(f"✅ Indexed: {indexed_count} | ❌ Failed: {failed_count}")
+                
+                if indexed_count > 0:
+                    st.info("Refreshing page to update stats...")
+                    st.rerun()
     
     st.divider()
     

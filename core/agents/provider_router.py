@@ -177,26 +177,27 @@ def classify_error(exc: Exception) -> ConnectionResult:
 
 
 def _classify_openai_compatible_error(exc: Exception, endpoint: str) -> ConnectionResult:
+    post_endpoint = f"POST {endpoint}"
     if isinstance(exc, TimeoutError):
-        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {endpoint}")
+        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {post_endpoint}")
     if isinstance(exc, error.HTTPError):
         body = mask_sensitive_text(exc.read().decode("utf-8", errors="replace"))
         if exc.code in {401, 403}:
-            return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {endpoint}: {body}")
+            return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {post_endpoint}: {body}")
         return ConnectionResult(
             STATUS_FAILED,
-            f"Connection failed calling {endpoint}: HTTP {exc.code} {body}",
+            f"Connection failed calling {post_endpoint}: HTTP {exc.code} {body}",
         )
     message = mask_sensitive_text(str(exc))
     err = message.lower()
     if "timeout" in err or "timed out" in err:
-        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {endpoint}: {message}")
+        return ConnectionResult(STATUS_TIMEOUT, f"Timeout calling {post_endpoint}: {message}")
     if "auth" in err or "api key" in err or "api_key" in err or "401" in err:
-        return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {endpoint}: {message}")
-    return ConnectionResult(STATUS_FAILED, f"Connection failed calling {endpoint}: {message}")
+        return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key calling {post_endpoint}: {message}")
+    return ConnectionResult(STATUS_FAILED, f"Connection failed calling {post_endpoint}: {message}")
 
 
-def _post_openai_compatible_chat(
+def call_openai_compatible_chat(
     *,
     base_url: str,
     api_key: str,
@@ -260,7 +261,7 @@ def test_connection(config: AIProviderConfig) -> ConnectionResult:
     try:
         if config.provider == PROVIDER_OPENAI_COMPATIBLE:
             try:
-                content = _post_openai_compatible_chat(
+                content = call_openai_compatible_chat(
                     base_url=config.base_url,
                     api_key=config.api_key,
                     model=config.model,
@@ -301,7 +302,7 @@ def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: s
     from openai import OpenAI
 
     if config.provider == PROVIDER_OPENAI_COMPATIBLE:
-        return _post_openai_compatible_chat(
+        return call_openai_compatible_chat(
             base_url=config.base_url,
             api_key=config.api_key,
             model=config.model,

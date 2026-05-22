@@ -264,6 +264,28 @@ def test_openai_compatible_test_connection_appends_v1_and_posts():
     assert calls[-1]["method"] == "POST"
 
 
+def test_openai_compatible_real_world_model_posts_without_get():
+    calls, original_urlopen = _install_fake_urlopen()
+    config = AIProviderConfig(
+        provider=PROVIDER_OPENAI_COMPATIBLE,
+        model="[m1]claude-sonnet-4-6",
+        api_key="test-key",
+        base_url="http://pro.mmw.ink/v1",
+        connection_status=STATUS_CONFIGURED,
+    )
+
+    try:
+        result = test_connection(config)
+    finally:
+        request.urlopen = original_urlopen
+
+    assert result.status == STATUS_CONNECTED
+    assert calls[-1]["url"] == "http://pro.mmw.ink/v1/chat/completions"
+    assert calls[-1]["method"] == "POST"
+    assert calls[-1]["method"] != "GET"
+    assert '"model": "[m1]claude-sonnet-4-6"' in calls[-1]["body"]
+
+
 def test_openai_compatible_generate_uses_same_normalized_post_path():
     calls, original_urlopen = _install_fake_urlopen(
         b'{"choices":[{"message":{"content":"Draft reply"}}]}'
@@ -313,5 +335,5 @@ def test_openai_compatible_invalid_key_error_masks_key_and_shows_endpoint():
         request.urlopen = original_urlopen
 
     assert result.status == "Invalid Key"
-    assert "http://pro.mmw.ink/v1/chat/completions" in result.message
+    assert "POST http://pro.mmw.ink/v1/chat/completions" in result.message
     assert "sk-test-secret-key" not in result.message

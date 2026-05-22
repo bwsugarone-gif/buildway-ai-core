@@ -6,8 +6,12 @@ CRM AI Reply Workflow MVP: real OpenAI API reply with session state.
 API keys never stored or committed.
 """
 
+import os
 import sys
 from pathlib import Path
+
+# Set protobuf implementation before importing any protobuf-dependent packages
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -27,6 +31,7 @@ from core.agents.provider_router import (
     PROVIDER_KEY_PLACEHOLDERS,
     PROVIDER_MODELS,
     PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
     STATUS_CONFIGURED,
     STATUS_CONNECTED,
     STATUS_COMING_SOON,

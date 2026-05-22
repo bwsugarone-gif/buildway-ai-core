@@ -1003,10 +1003,12 @@ elif page == L["nav_crm"]:
                 )
                 with st.spinner("Generating AI draft..."):
                     try:
-                        # Phase 0.5A: RAG retrieval with result storage
+                        # Phase 0.5A: RAG retrieval with guardrails
                         kb_context = ""
                         kb_used = False
                         kb_results = []
+                        confidence_level = "LOW"
+                        conflict_warning = None
                         
                         if st.session_state.get("rag_initialized"):
                             try:
@@ -1016,6 +1018,14 @@ elif page == L["nav_crm"]:
                                 if results:
                                     kb_used = True
                                     kb_results = results  # Store for display
+                                    
+                                    # Calculate confidence
+                                    confidence_level = retriever.calculate_confidence(results)
+                                    
+                                    # Detect conflicts
+                                    conflict_warning = retriever.detect_conflicts(results, customer_input)
+                                    
+                                    # Build context
                                     context_parts = []
                                     for i, result in enumerate(results, 1):
                                         context_parts.append(f"[Context {i}]\n{result['text']}")
@@ -1023,20 +1033,32 @@ elif page == L["nav_crm"]:
                             except Exception as kb_error:
                                 st.caption(f"KB retrieval failed (continuing without context): {kb_error}")
                         
-                        # Store KB results in session state for display
+                        # Store KB results and metadata in session state
                         st.session_state["crm_last_kb_results"] = kb_results
+                        st.session_state["crm_confidence"] = confidence_level
+                        st.session_state["crm_conflict_warning"] = conflict_warning
                         
-                        # Build system prompt with KB context
+                        # Build system prompt with anti-hallucination guardrails
                         system_prompt = CRM_SYSTEM_PROMPT
                         if kb_context:
-                            system_prompt = (
-                                "You are a professional foreign trade sales assistant. "
-                                "Use the company knowledge base when relevant. "
-                                "If the answer is not in the knowledge base, ask politely for clarification. "
-                                "Keep replies business-friendly and concise.\n\n"
-                                f"CONTEXT (from Knowledge Base):\n{kb_context}\n\n"
-                                "Generate a professional reply based on the customer message and context above."
-                            )
+                            system_prompt = """You are a professional foreign trade sales assistant.
+
+STRICT RULES:
+- NEVER invent pricing information
+- NEVER invent shipping fees or delivery times
+- NEVER invent MOQ (Minimum Order Quantity)
+- NEVER make up product specifications
+- ONLY use information from the provided Knowledge Base context
+- If information is missing: politely ask follow-up questions
+- If confidence is low: explicitly state uncertainty
+- If KB has conflicting data: explain the conflict instead of choosing randomly
+- Do not estimate numerical values if exact information is unavailable
+
+CONTEXT (from Knowledge Base):
+{kb_context}
+
+Generate a professional reply based ONLY on the customer message and context above.
+If the answer is not in the knowledge base, say so and ask for clarification.""".format(kb_context=kb_context)
                         
                         ai_result = call_ai_reply(
                             provider=selected_config.provider,
@@ -1090,7 +1112,7 @@ elif page == L["nav_crm"]:
                 unsafe_allow_html=True,
             )
 
-        action_col1, action_col2, action_col3 = st.columns(3)
+        action_col1, action_col2, action_col3, action_col4 = st.columns(4)
         with action_col1:
             src = st.session_state.get("crm_reply_source", "")
             st.caption(f"Source: {src}" if src else "")
@@ -1098,22 +1120,49 @@ elif page == L["nav_crm"]:
             kb_used = st.session_state.get("crm_kb_context_used", False)
             st.caption(f"KB Context: {'Yes ✓' if kb_used else 'No'}")
         with action_col3:
+            confidence = st.session_state.get("crm_confidence", "N/A")
+            confidence_emoji = {
+                "HIGH": "🟢",
+                "MEDIUM": "🟡",
+                "LOW": "🔴"
+            }.get(confidence, "⚪")
+            st.caption(f"Confidence: {confidence_emoji} {confidence}")
+        with action_col4:
             if st.button("Copy Reply", use_container_width=True):
                 st.toast("Reply copied (browser clipboard integration coming in Phase 0.5).")
         
-        # Retrieved KB Context Display (Phase 0.5A)
+        # Conflict Warning Display
+        if st.session_state.get("crm_conflict_warning"):
+            st.warning(st.session_state["crm_conflict_warning"])
+        
+        # Retrieved KB Context Display (Phase 0.5A with debug info)
         if st.session_state.get("crm_last_kb_results"):
-            with st.expander("📚 Retrieved KB Context"):
+            with st.expander("📚 Retrieved KB Context (Debug)"):
                 for i, result in enumerate(st.session_state["crm_last_kb_results"], 1):
                     filename = result['metadata'].get('file_name', 'unknown')
                     distance = result.get('distance', 0.0)
-                    st.caption(f"**Source {i}:** {filename} (distance: {distance:.4f})")
+                    similarity = result.get('similarity', 0.0)
+                    source_weight = result.get('source_weight', 1.0)
+                    weighted_score = result.get('weighted_score', 0.0)
+                    chunk_index = result['metadata'].get('chunk_index', 'N/A')
+                    
+                    st.markdown("---")
+                    st.caption(f"**Source {i}:** {filename}")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Similarity", f"{similarity:.3f}")
+                    with col2:
+                        st.metric("Weight", f"{source_weight:.2f}x")
+                    with col3:
+                        st.metric("Final Score", f"{weighted_score:.3f}")
+                    
+                    st.caption(f"Chunk #{chunk_index}")
+                    
                     preview = result['text'][:500]
                     if len(result['text']) > 500:
                         preview += "..."
                     st.write(preview)
-                    if i < len(st.session_state["crm_last_kb_results"]):
-                        st.divider()
 
     st.divider()
 

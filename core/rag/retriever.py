@@ -14,6 +14,22 @@ from .embedder import create_embedder, PROVIDER_LOCAL
 from .vector_store import VectorStore
 
 
+# Source Priority Weighting System
+SOURCE_PRIORITY = {
+    "faq": 1.5,
+    "product": 1.3,
+    "catalog": 1.3,
+    "price": 1.2,
+    "shipping": 1.2,
+    "template": 1.1,
+    "reply": 1.1,
+    "notes": 0.7,
+    "random": 0.5,
+    "garbage": 0.3,
+    "test": 0.5,
+}
+
+
 class RAGRetriever:
     """
     Unified RAG retrieval system.
@@ -111,6 +127,125 @@ class RAGRetriever:
             "chunk_ids": chunk_ids,
         }
     
+    def _get_source_weight(self, filename: str) -> float:
+        """
+        Determine source weight based on filename.
+        
+        Args:
+            filename: Name of the source file.
+        
+        Returns:
+            Weight multiplier (higher = more important).
+        """
+        filename_lower = filename.lower()
+        for keyword, weight in SOURCE_PRIORITY.items():
+            if keyword in filename_lower:
+                return weight
+        return 1.0  # default weight for unrecognized sources
+    
+    def _apply_source_weighting(self, results: List[Dict]) -> List[Dict]:
+        """
+        Apply source priority weighting and re-sort results.
+        
+        Args:
+            results: Raw search results from vector store.
+        
+        Returns:
+            Results with added weight fields, sorted by weighted_score.
+        """
+        for result in results:
+            filename = result['metadata'].get('file_name', '')
+            source_weight = self._get_source_weight(filename)
+            
+            # Convert distance to similarity (lower distance = higher similarity)
+            # ChromaDB uses cosine distance: range [0, 2], lower is better
+            distance = result.get('distance', 0.0)
+            similarity = 1.0 - (distance / 2.0)  # normalize to [0, 1]
+            
+            # Calculate weighted score
+            weighted_score = similarity * source_weight
+            
+            result['source_weight'] = source_weight
+            result['similarity'] = similarity
+            result['weighted_score'] = weighted_score
+        
+        # Re-sort by weighted_score (descending)
+        results.sort(key=lambda x: x.get('weighted_score', 0.0), reverse=True)
+        return results
+    
+    def calculate_confidence(self, results: List[Dict]) -> str:
+        """
+        Calculate confidence level based on top result similarity.
+        
+        Args:
+            results: Search results (should already have similarity scores).
+        
+        Returns:
+            "HIGH", "MEDIUM", or "LOW"
+        """
+        if not results:
+            return "LOW"
+        
+        top_similarity = results[0].get('similarity', 0.0)
+        
+        if top_similarity >= 0.85:
+            return "HIGH"
+        elif top_similarity >= 0.65:
+            return "MEDIUM"
+        else:
+            return "LOW"
+    
+    def detect_conflicts(self, results: List[Dict], query: str) -> Optional[str]:
+        """
+        Detect if retrieved chunks contain conflicting information.
+        
+        Args:
+            results: Search results.
+            query: Original query string.
+        
+        Returns:
+            Warning message if conflict detected, None otherwise.
+        """
+        if len(results) < 2:
+            return None
+        
+        # Keywords that often have specific values that might conflict
+        conflict_keywords = {
+            "moq": "MOQ",
+            "minimum order": "MOQ",
+            "price": "pricing",
+            "cost": "pricing",
+            "shipping": "shipping terms",
+            "delivery": "delivery time",
+            "payment": "payment terms",
+            "lead time": "lead time",
+        }
+        
+        query_lower = query.lower()
+        detected_keyword = None
+        detected_label = None
+        
+        for keyword, label in conflict_keywords.items():
+            if keyword in query_lower:
+                detected_keyword = keyword
+                detected_label = label
+                break
+        
+        if not detected_keyword:
+            return None
+        
+        # Check if multiple top results mention the keyword
+        top_texts = [r['text'].lower() for r in results[:3]]
+        keyword_mentions = sum(1 for text in top_texts if detected_keyword in text)
+        
+        if keyword_mentions >= 2:
+            # Check if they're from different sources
+            sources = set(r['metadata'].get('file_name', '') for r in results[:3])
+            if len(sources) > 1:
+                return f"⚠️ Knowledge base contains multiple {detected_label} values from different sources. Please verify which applies to your specific case."
+        
+        return None
+    
     def search(
         self,
         query: str,
@@ -118,7 +253,7 @@ class RAGRetriever:
         filter_metadata: Optional[Dict] = None,
     ) -> List[Dict]:
         """
-        Search for relevant chunks.
+        Search for relevant chunks with source weighting applied.
         
         Args:
             query: Search query string.
@@ -126,7 +261,8 @@ class RAGRetriever:
             filter_metadata: Optional metadata filter.
         
         Returns:
-            List of dicts with keys: id, text, metadata, distance.
+            List of dicts with keys: id, text, metadata, distance, similarity, 
+            source_weight, weighted_score.
         """
         if not query or not query.strip():
             return []
@@ -140,6 +276,10 @@ class RAGRetriever:
             top_k=top_k,
             filter_metadata=filter_metadata,
         )
+        
+        # Apply source weighting and re-sort
+        if results:
+            results = self._apply_source_weighting(results)
         
         return results
     

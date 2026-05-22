@@ -965,12 +965,15 @@ elif page == L["nav_crm"]:
 
     # ── Session state init ────────────────────────
     _ensure_ai_state_defaults()
+    
+    # Backward compatibility: migrate crm_message to customer_message
+    if "customer_message" not in st.session_state:
+        st.session_state["customer_message"] = st.session_state.get("crm_message", "")
+    
     if "crm_reply" not in st.session_state:
         st.session_state["crm_reply"] = ""
     if "crm_reply_source" not in st.session_state:
         st.session_state["crm_reply_source"] = ""
-    if "crm_message" not in st.session_state:
-        st.session_state["crm_message"] = "Hi, what is your MOQ and delivery time?"
     if "crm_kb_context_used" not in st.session_state:
         st.session_state["crm_kb_context_used"] = False
 
@@ -1005,11 +1008,11 @@ elif page == L["nav_crm"]:
     # ── Customer message input ────────────────────
     st.subheader("Customer Message")
     customer_input = st.text_area(
-        "customer_input",
-        value=st.session_state["crm_message"],
-        height=110,
+        "Customer Message",
+        key="customer_message",
+        height=200,
         label_visibility="collapsed",
-        placeholder="Paste or type the customer message here...",
+        placeholder="Paste customer inquiry here...",
     )
 
     btn_col1, btn_col2 = st.columns([3, 1])
@@ -1024,16 +1027,18 @@ elif page == L["nav_crm"]:
         clear_clicked = st.button("Clear", use_container_width=True)
 
     if clear_clicked:
+        st.session_state["customer_message"] = ""
         st.session_state["crm_reply"] = ""
         st.session_state["crm_reply_source"] = ""
-        st.session_state["crm_message"] = ""
-        st.rerun()
+        st.session_state["crm_kb_context_used"] = False
+        st.session_state["crm_confidence"] = "N/A"
+        st.session_state["crm_conflict_warning"] = None
+        st.session_state["crm_last_kb_results"] = []
 
     if generate_clicked:
-        if not customer_input.strip():
+        if not st.session_state["customer_message"].strip():
             st.warning("Please enter a customer message before generating.")
         else:
-            st.session_state["crm_message"] = customer_input
             selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
             if selected_config.connection_status == STATUS_CONNECTED:
                 _show_ai_debug(
@@ -1056,7 +1061,7 @@ elif page == L["nav_crm"]:
                         if st.session_state.get("rag_initialized"):
                             try:
                                 retriever = st.session_state["rag_retriever"]
-                                results = retriever.search(customer_input, top_k=5)
+                                results = retriever.search(st.session_state["customer_message"], top_k=5)
                                 
                                 if results:
                                     kb_used = True
@@ -1074,7 +1079,7 @@ elif page == L["nav_crm"]:
                                     # Detect conflicts with fallback
                                     try:
                                         if hasattr(retriever, 'detect_conflicts'):
-                                            conflict_warning = retriever.detect_conflicts(results, customer_input)
+                                            conflict_warning = retriever.detect_conflicts(results, st.session_state["customer_message"])
                                         else:
                                             conflict_warning = None
                                     except Exception:

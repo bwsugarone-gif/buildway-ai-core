@@ -322,17 +322,15 @@ def _format_ai_api_error(exc: Exception) -> str:
 
 def _show_ai_debug(debug) -> None:
     st.caption("AI request debug")
-    st.json(
-        {
-            "function": debug.function_name,
-            "method": debug.method,
-            "final_endpoint": debug.final_endpoint,
-            "provider": debug.provider,
-            "model": debug.model,
-            "base_url": debug.base_url,
-            "endpoint_path": debug.endpoint_path,
-        }
-    )
+    debug_data = {
+        "function": debug.function_name,
+        "method": debug.method,
+        "final_endpoint": debug.final_endpoint,
+        "provider": debug.provider,
+        "model": debug.model,
+        "sdk_or_api": debug.sdk_or_api,
+    }
+    st.json(debug_data)
 
 
 # ──────────────────────────────────────────────
@@ -498,7 +496,8 @@ elif page == L["nav_ai"]:
             )
         base_url_input = ""
         endpoint_path_input = DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH
-        if provider_requires_base_url(provider):
+        # Only show base_url/endpoint_path for OpenAI-Compatible
+        if provider == PROVIDER_OPENAI_COMPATIBLE:
             base_url_input = st.text_input(
                 L["base_url"],
                 value=provider_config.base_url,

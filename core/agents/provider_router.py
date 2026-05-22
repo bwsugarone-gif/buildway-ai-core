@@ -3,9 +3,8 @@ core.agents.provider_router
 ---------------------------
 Provider routing and connection checks for Buildway AI Core.
 
-Phase 0.4C supports real OpenAI and OpenAI-compatible connection tests. Other
-providers keep their config surface but intentionally return a not-supported
-status until their SDK integrations are implemented.
+Phase 0.4E Hotfix: Native provider implementations for Claude, Gemini, DeepSeek.
+Separate from OpenAI-Compatible routing.
 """
 
 from dataclasses import dataclass
@@ -65,11 +64,9 @@ PROVIDER_MODELS = {
         "custom",
     ],
     PROVIDER_GEMINI: [
-        "gemini-3.5-flash",
-        "gemini-3.1-pro",
-        "gemini-3-flash",
-        "gemini-2.5-pro",
         "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
         "custom",
     ],
     PROVIDER_DEEPSEEK: [
@@ -135,8 +132,7 @@ class AIRequestDebug:
     final_endpoint: str
     provider: str
     model: str
-    base_url: str
-    endpoint_path: str
+    sdk_or_api: str = ""
 
 
 @dataclass
@@ -185,19 +181,27 @@ def build_ai_request_debug(
         normalized_base_url = normalize_openai_compatible_base_url(base_url)
         normalized_endpoint_path = normalize_openai_compatible_endpoint_path(endpoint_path)
         final_endpoint = f"{normalized_base_url}{normalized_endpoint_path}"
-        debug_base_url = normalized_base_url
+        sdk_or_api = "urllib-direct"
+    elif provider == PROVIDER_CLAUDE:
+        final_endpoint = "anthropic.messages.create"
+        sdk_or_api = "anthropic-sdk"
+    elif provider == PROVIDER_GEMINI:
+        final_endpoint = "google.genai.GenerativeModel.generate_content"
+        sdk_or_api = "google-genai-sdk"
+    elif provider == PROVIDER_DEEPSEEK:
+        final_endpoint = "https://api.deepseek.com/chat/completions"
+        sdk_or_api = "deepseek-compatible-native"
     else:
-        final_endpoint = "OpenAI SDK chat.completions.create"
-        debug_base_url = ""
-        normalized_endpoint_path = ""
+        final_endpoint = "openai.chat.completions.create"
+        sdk_or_api = "openai-sdk"
+    
     return AIRequestDebug(
         function_name="call_ai_reply",
         method="POST",
         final_endpoint=final_endpoint,
         provider=provider,
         model=model,
-        base_url=debug_base_url,
-        endpoint_path=normalized_endpoint_path,
+        sdk_or_api=sdk_or_api,
     )
 
 
@@ -238,6 +242,8 @@ def classify_error(exc: Exception) -> ConnectionResult:
         return ConnectionResult(STATUS_INVALID_KEY, f"Invalid API key: {raw}")
     if "timeout" in err or "timed out" in err or "timeout" in exc_name:
         return ConnectionResult(STATUS_TIMEOUT, f"Timeout: {raw}")
+    if not raw or raw == "":
+        return ConnectionResult(STATUS_FAILED, "Empty response from provider")
     return ConnectionResult(STATUS_FAILED, f"Connection failed: {raw}")
 
 
@@ -309,6 +315,109 @@ def call_openai_compatible_chat(
     return AIReplyResult(message.get("content", "") or "", debug)
 
 
+def call_claude_native(
+    *,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int | None = None,
+) -> AIReplyResult:
+    from anthropic import Anthropic
+    
+    debug = build_ai_request_debug(PROVIDER_CLAUDE, model)
+    client = Anthropic(api_key=api_key, timeout=30)
+    
+    # Convert messages format (extract system if present)
+    system_content = None
+    user_messages = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_content = msg["content"]
+        else:
+            user_messages.append(msg)
+    
+    request_kwargs = {
+        "model": model,
+        "messages": user_messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens or 1024,
+    }
+    if system_content:
+        request_kwargs["system"] = system_content
+    
+    response = client.messages.create(**request_kwargs)
+    content = response.content[0].text if response.content else ""
+    return AIReplyResult(content, debug)
+
+
+def call_gemini_native(
+    *,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int | None = None,
+) -> AIReplyResult:
+    from google import genai
+    from google.genai import types
+    
+    debug = build_ai_request_debug(PROVIDER_GEMINI, model)
+    client = genai.Client(api_key=api_key)
+    
+    # Convert messages to Gemini format
+    system_instruction = None
+    contents = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_instruction = msg["content"]
+        elif msg["role"] == "user":
+            contents.append(types.Content(role="user", parts=[types.Part(text=msg["content"])]))
+        elif msg["role"] == "assistant":
+            contents.append(types.Content(role="model", parts=[types.Part(text=msg["content"])]))
+    
+    config = types.GenerateContentConfig(
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+        system_instruction=system_instruction,
+    )
+    
+    response = client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
+    )
+    
+    content = response.text if response.text else ""
+    return AIReplyResult(content, debug)
+
+
+def call_deepseek_native(
+    *,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int | None = None,
+) -> AIReplyResult:
+    from openai import OpenAI
+    
+    debug = build_ai_request_debug(PROVIDER_DEEPSEEK, model)
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com", timeout=30)
+    
+    request_kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        request_kwargs["max_tokens"] = max_tokens
+    
+    response = client.chat.completions.create(**request_kwargs)
+    content = response.choices[0].message.content or ""
+    return AIReplyResult(content, debug)
+
+
 def validate_config(config: AIProviderConfig) -> ConnectionResult | None:
     if not config.api_key:
         return ConnectionResult(STATUS_NOT_CONFIGURED, "Missing API key")
@@ -338,51 +447,68 @@ def call_ai_reply(
     if not is_provider_available(provider):
         raise NotImplementedError(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
     
-    # OpenAI-Compatible uses urllib
+    # Build messages
+    messages = []
+    if system_prompt and not test_mode:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": message})
+    
+    temperature = 0 if test_mode else 0.7
+    max_tokens = 8 if test_mode else None
+    
+    # Route to native provider implementations
     if provider == PROVIDER_OPENAI_COMPATIBLE:
         return call_openai_compatible_chat(
             base_url=base_url,
             endpoint_path=endpoint_path,
             api_key=api_key,
             model=model,
-            messages=[
-                *([{"role": "system", "content": system_prompt}] if system_prompt and not test_mode else []),
-                {"role": "user", "content": message},
-            ],
-            temperature=0 if test_mode else 0.7,
-            max_tokens=8 if test_mode else None,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
-    
-    # All other providers use OpenAI SDK (OpenAI, Claude, Gemini, DeepSeek)
-    from openai import OpenAI
-
-    client_kwargs = {"api_key": api_key, "timeout": 30}
-    
-    # Provider-specific base_url configuration
-    if provider == PROVIDER_CLAUDE:
-        client_kwargs["base_url"] = "https://api.anthropic.com/v1"
+    elif provider == PROVIDER_CLAUDE:
+        return call_claude_native(
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     elif provider == PROVIDER_GEMINI:
-        client_kwargs["base_url"] = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        return call_gemini_native(
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     elif provider == PROVIDER_DEEPSEEK:
-        client_kwargs["base_url"] = "https://api.deepseek.com"
-    
-    client = OpenAI(**client_kwargs)
-    request_kwargs = {
-        "model": model,
-        "messages": [
-            *([{"role": "system", "content": system_prompt}] if system_prompt and not test_mode else []),
-            {"role": "user", "content": message},
-        ],
-        "temperature": 0 if test_mode else 0.7,
-        "presence_penalty": 0 if test_mode else 0.2,
-    }
-    if test_mode:
-        request_kwargs["max_tokens"] = 8
-    response = client.chat.completions.create(**request_kwargs)
-    return AIReplyResult(
-        response.choices[0].message.content or "",
-        build_ai_request_debug(provider, model, base_url, endpoint_path),
-    )
+        return call_deepseek_native(
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    else:  # PROVIDER_OPENAI
+        from openai import OpenAI
+        
+        debug = build_ai_request_debug(provider, model)
+        client = OpenAI(api_key=api_key, timeout=30)
+        
+        request_kwargs = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "presence_penalty": 0 if test_mode else 0.2,
+        }
+        if test_mode:
+            request_kwargs["max_tokens"] = 8
+        
+        response = client.chat.completions.create(**request_kwargs)
+        content = response.choices[0].message.content or ""
+        return AIReplyResult(content, debug)
 
 
 def generate_reply(config: AIProviderConfig, system_prompt: str, user_message: str) -> str:

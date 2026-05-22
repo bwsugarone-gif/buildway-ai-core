@@ -963,10 +963,16 @@ elif page == L["nav_crm"]:
                         reply = ai_result.content
                         if reply:
                             st.session_state["crm_reply"] = reply
-                            st.session_state["crm_reply_source"] = (
-                                "OpenAI-Compatible API"
-                                if selected_config.provider == "OpenAI-Compatible"
-                                else "OpenAI API"
+                            # Provider-specific source labels
+                            provider_source_map = {
+                                "OpenAI": "OpenAI API",
+                                "Claude": "Claude API",
+                                "Gemini": "Gemini API",
+                                "DeepSeek": "DeepSeek API",
+                                "OpenAI-Compatible": "OpenAI-Compatible API",
+                            }
+                            st.session_state["crm_reply_source"] = provider_source_map.get(
+                                selected_config.provider, f"{selected_config.provider} API"
                             )
                             st.session_state["crm_kb_context_used"] = kb_used
                         else:

@@ -27,8 +27,14 @@ SUPPORTED_PROVIDERS = [
     PROVIDER_GEMINI,
     PROVIDER_DEEPSEEK,
 ]
-AVAILABLE_PROVIDERS = [PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE]
-COMING_SOON_PROVIDERS = [PROVIDER_CLAUDE, PROVIDER_GEMINI, PROVIDER_DEEPSEEK]
+AVAILABLE_PROVIDERS = [
+    PROVIDER_OPENAI,
+    PROVIDER_OPENAI_COMPATIBLE,
+    PROVIDER_CLAUDE,
+    PROVIDER_GEMINI,
+    PROVIDER_DEEPSEEK,
+]
+COMING_SOON_PROVIDERS = []
 
 STATUS_NOT_CONFIGURED = "Not configured"
 STATUS_CONFIGURED = "Configured"
@@ -52,17 +58,16 @@ PROVIDER_MODELS = {
         "custom",
     ],
     PROVIDER_CLAUDE: [
-        "claude-opus-4.7",
-        "claude-opus-4.6",
-        "claude-sonnet-4.6",
-        "claude-opus-4.5",
-        "claude-sonnet-4.5",
-        "claude-haiku-4.5",
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-haiku-4-5",
         "custom",
     ],
     PROVIDER_GEMINI: [
-        "gemini-3-pro-preview",
         "gemini-3.5-flash",
+        "gemini-3.1-pro",
+        "gemini-3-flash",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "custom",
@@ -197,7 +202,13 @@ def build_ai_request_debug(
 
 
 def is_provider_integrated(provider: str) -> bool:
-    return provider in {PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE}
+    return provider in {
+        PROVIDER_OPENAI,
+        PROVIDER_OPENAI_COMPATIBLE,
+        PROVIDER_CLAUDE,
+        PROVIDER_GEMINI,
+        PROVIDER_DEEPSEEK,
+    }
 
 
 def is_provider_available(provider: str) -> bool:
@@ -326,6 +337,8 @@ def call_ai_reply(
 ) -> AIReplyResult:
     if not is_provider_available(provider):
         raise NotImplementedError(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
+    
+    # OpenAI-Compatible uses urllib
     if provider == PROVIDER_OPENAI_COMPATIBLE:
         return call_openai_compatible_chat(
             base_url=base_url,
@@ -339,10 +352,20 @@ def call_ai_reply(
             temperature=0 if test_mode else 0.7,
             max_tokens=8 if test_mode else None,
         )
-
+    
+    # All other providers use OpenAI SDK (OpenAI, Claude, Gemini, DeepSeek)
     from openai import OpenAI
 
     client_kwargs = {"api_key": api_key, "timeout": 30}
+    
+    # Provider-specific base_url configuration
+    if provider == PROVIDER_CLAUDE:
+        client_kwargs["base_url"] = "https://api.anthropic.com/v1"
+    elif provider == PROVIDER_GEMINI:
+        client_kwargs["base_url"] = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    elif provider == PROVIDER_DEEPSEEK:
+        client_kwargs["base_url"] = "https://api.deepseek.com"
+    
     client = OpenAI(**client_kwargs)
     request_kwargs = {
         "model": model,

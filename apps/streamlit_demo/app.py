@@ -696,33 +696,131 @@ elif page == L["nav_db"]:
                 st.warning("No Database URL provided. Using placeholder mode.")
 
 # ──────────────────────────────────────────────
-# Page: Knowledge Base
+# Page: Knowledge Base (Phase 0.4D — Real RAG)
 # ──────────────────────────────────────────────
 elif page == L["nav_kb"]:
     st.title(L["nav_kb"])
-
-    kb_col1, kb_col2, kb_col3 = st.columns(3)
-    with kb_col1:
-        st.metric("FAQ", "Not connected")
-    with kb_col2:
-        st.metric("Product Catalog", "Not connected")
-    with kb_col3:
-        st.metric("Reply Templates", "Not connected")
-
-    st.info(
-        "Phase 1 Knowledge Base — Only the following documents are needed:\n\n"
-        "- FAQ\n- Product Catalog\n- MOQ / Shipping Terms / Payment Terms\n- Reply Templates"
-    )
-
+    
+    # Initialize RAG retriever in session state
+    if "rag_retriever" not in st.session_state:
+        try:
+            from core.rag.retriever import RAGRetriever
+            from core.rag.embedder import PROVIDER_LOCAL
+            from pathlib import Path
+            
+            # Use local embeddings by default
+            st.session_state["rag_retriever"] = RAGRetriever(
+                embedding_provider=PROVIDER_LOCAL,
+            )
+            st.session_state["rag_initialized"] = True
+        except Exception as e:
+            st.session_state["rag_initialized"] = False
+            st.session_state["rag_error"] = str(e)
+    
+    # KB Statistics
+    if st.session_state.get("rag_initialized"):
+        try:
+            stats = st.session_state["rag_retriever"].get_stats()
+            kb_col1, kb_col2, kb_col3 = st.columns(3)
+            with kb_col1:
+                st.metric("Total Chunks", stats["total_chunks"])
+            with kb_col2:
+                st.metric("Embedding Provider", stats["embedding_provider"].replace("Embedder", ""))
+            with kb_col3:
+                st.metric("Status", "Ready" if stats["total_chunks"] > 0 else "Empty")
+        except Exception as e:
+            st.error(f"Failed to load KB stats: {e}")
+    else:
+        st.error(f"RAG system not initialized: {st.session_state.get('rag_error', 'Unknown error')}")
+        st.info("Please check that chromadb and sentence-transformers are installed.")
+    
     st.divider()
-
-    # FAQ Data Template
-    st.subheader("FAQ Data Template")
-    st.markdown(
-        "Prepare your FAQ as an Excel or CSV file with the following columns. "
-        "This is the recommended format for building the RAG Knowledge Base."
+    
+    # Upload Section
+    st.subheader("Upload Documents")
+    st.caption("Supported formats: PDF, TXT, DOCX, MD")
+    
+    uploaded_files = st.file_uploader(
+        "Upload Knowledge Base Documents",
+        type=["pdf", "txt", "docx", "md"],
+        accept_multiple_files=True,
+        key="kb_uploader",
     )
-    st.markdown("""
+    
+    if uploaded_files and st.session_state.get("rag_initialized"):
+        if st.button("Index Uploaded Files", type="primary"):
+            from pathlib import Path
+            import tempfile
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for i, uploaded_file in enumerate(uploaded_files):
+                try:
+                    status_text.text(f"Processing {uploaded_file.name}...")
+                    
+                    # Save to temp file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = Path(tmp_file.name)
+                    
+                    # Index document
+                    result = st.session_state["rag_retriever"].index_document(
+                        file_path=tmp_path,
+                        metadata={"source": "upload", "original_name": uploaded_file.name},
+                    )
+                    
+                    # Clean up temp file
+                    tmp_path.unlink()
+                    
+                    st.success(f"✓ {uploaded_file.name}: {result['chunk_count']} chunks indexed")
+                    
+                except Exception as e:
+                    st.error(f"✗ {uploaded_file.name}: {str(e)}")
+                
+                progress_bar.progress((i + 1) / len(uploaded_files))
+            
+            status_text.text("Indexing complete!")
+            st.rerun()
+    
+    st.divider()
+    
+    # Indexed Documents List
+    st.subheader("Indexed Documents")
+    
+    if st.session_state.get("rag_initialized"):
+        try:
+            stats = st.session_state["rag_retriever"].get_stats()
+            
+            if stats["total_chunks"] == 0:
+                st.info("No documents indexed yet. Upload documents above to get started.")
+            else:
+                st.caption(f"Total chunks in vector database: {stats['total_chunks']}")
+                
+                # Placeholder for document list (ChromaDB doesn't provide easy document listing)
+                st.info(
+                    "Document management UI coming in Phase 0.4E. "
+                    "Currently showing total chunk count only."
+                )
+                
+                # Clear all button
+                if st.button("Clear All Documents", type="secondary"):
+                    if st.button("Confirm Clear All", type="secondary"):
+                        st.session_state["rag_retriever"].clear_all()
+                        st.success("All documents cleared from vector database.")
+                        st.rerun()
+        except Exception as e:
+            st.error(f"Failed to load documents: {e}")
+    
+    st.divider()
+    
+    # FAQ Data Template (keep existing)
+    with st.expander("📋 FAQ Data Template Reference"):
+        st.markdown(
+            "Prepare your FAQ as an Excel or CSV file with the following columns. "
+            "This is the recommended format for building the RAG Knowledge Base."
+        )
+        st.markdown("""
 | Column | Description |
 |---|---|
 | Category | Topic group, e.g. MOQ, Shipping, Payment |
@@ -733,43 +831,6 @@ elif page == L["nav_kb"]:
 | Risk Level | Low / Medium / High |
 | Notes | Internal notes, e.g. "Do not quote exact price" |
 """)
-
-    st.markdown("**Example row:**")
-    st.code(
-        "Category: MOQ\n"
-        "Question: What is your MOQ?\n"
-        "Standard Answer: Our MOQ depends on product model. Please share the model number and quantity for confirmation.\n"
-        "Can Auto Reply: Yes\n"
-        "Need Human Approval: No\n"
-        "Risk Level: Low\n"
-        "Notes: Do not quote exact price.",
-        language="text",
-    )
-    st.caption("Recommended format: Excel (.xlsx) or CSV. Minimum 20 Q&A pairs for Phase 1.")
-
-    st.divider()
-    st.subheader("Upload Documents (Demo)")
-    st.caption(
-        "Demo mode supports small files only. "
-        "Recommended test file size: under 20MB. "
-        "Large files such as 200MB will be handled in production by background ingestion."
-    )
-    uploaded = st.file_uploader(
-        "Upload FAQ / Product Catalog / Templates",
-        type=["pdf", "txt", "docx", "csv", "xlsx"],
-        accept_multiple_files=True,
-    )
-    if uploaded:
-        for f in uploaded:
-            size_mb = f.size / (1024 * 1024)
-            if size_mb > 20:
-                st.warning(
-                    f"`{f.name}` ({size_mb:.1f} MB) — File too large for demo mode. "
-                    "Production version will support large file ingestion via cloud storage."
-                )
-            else:
-                st.info(f"`{f.name}` ({size_mb:.1f} MB) — received (demo: not processed or stored)")
-        st.caption("In Phase 1, files will be chunked and indexed into Qdrant per tenant_id.")
 
 # ──────────────────────────────────────────────
 # Page: CRM Demo  (Phase 0.4B — Real AI API)

@@ -818,26 +818,82 @@ elif page == L["nav_kb"]:
     if st.session_state.get("rag_initialized"):
         try:
             stats = st.session_state["rag_retriever"].get_stats()
+            documents = st.session_state["rag_retriever"].list_documents()
             
             if stats["total_chunks"] == 0:
                 st.info("No documents indexed yet. Upload documents above to get started.")
             else:
                 st.caption(f"Total chunks in vector database: {stats['total_chunks']}")
                 
-                # Placeholder for document list (ChromaDB doesn't provide easy document listing)
-                st.info(
-                    "Document management UI coming in Phase 0.4E. "
-                    "Currently showing total chunk count only."
-                )
+                # Document list with management buttons
+                for doc in documents:
+                    col1, col2, col3, col4, col5 = st.columns([3, 1, 2, 1, 1])
+                    with col1:
+                        st.write(f"📄 **{doc['file_name']}**")
+                    with col2:
+                        st.write(f"{doc['chunk_count']} chunks")
+                    with col3:
+                        indexed_time = doc['indexed_at'][:19].replace('T', ' ') if doc['indexed_at'] else ""
+                        st.caption(indexed_time)
+                    with col4:
+                        if st.button("🗑️", key=f"del_{doc['file_name']}", help="Delete document"):
+                            try:
+                                deleted = st.session_state["rag_retriever"].delete_document(doc['file_name'])
+                                st.success(f"Deleted {deleted} chunks from {doc['file_name']}")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Delete failed: {e}")
+                    with col5:
+                        st.button("🔄", key=f"reindex_{doc['file_name']}", help="Re-index (requires original file)", disabled=True)
+                
+                st.divider()
                 
                 # Clear all button
                 if st.button("Clear All Documents", type="secondary"):
-                    if st.button("Confirm Clear All", type="secondary"):
+                    if st.button("Confirm Clear All", type="secondary", key="confirm_clear_all"):
                         st.session_state["rag_retriever"].clear_all()
                         st.success("All documents cleared from vector database.")
                         st.rerun()
         except Exception as e:
             st.error(f"Failed to load documents: {e}")
+    
+    st.divider()
+    
+    # KB Search Test Box
+    st.subheader("Search Knowledge Base")
+    
+    if st.session_state.get("rag_initialized"):
+        search_col1, search_col2 = st.columns([4, 1])
+        with search_col1:
+            search_query = st.text_input("Search query", placeholder="e.g., What is MOQ?", key="kb_search_query")
+        with search_col2:
+            top_k = st.number_input("Top K", min_value=1, max_value=10, value=5, key="kb_search_top_k")
+        
+        if st.button("Search KB", key="kb_search_btn"):
+            if search_query:
+                try:
+                    with st.spinner("Searching..."):
+                        results = st.session_state["rag_retriever"].search(search_query, top_k=top_k)
+                    
+                    if results:
+                        st.success(f"Found {len(results)} results")
+                        for i, result in enumerate(results, 1):
+                            filename = result['metadata'].get('file_name', 'unknown')
+                            distance = result.get('distance', 0.0)
+                            with st.expander(f"Result {i} — {filename} (distance: {distance:.4f})"):
+                                preview = result['text'][:500]
+                                if len(result['text']) > 500:
+                                    preview += "..."
+                                st.write(preview)
+                                st.caption(f"Chunk index: {result['metadata'].get('chunk_index', 'N/A')}")
+                    else:
+                        st.info("No results found")
+                except Exception as e:
+                    st.error(f"Search failed: {e}")
+            else:
+                st.warning("Please enter a search query")
+    else:
+        st.info("RAG system not initialized. Please check Knowledge Base setup.")
     
     st.divider()
     
@@ -947,9 +1003,10 @@ elif page == L["nav_crm"]:
                 )
                 with st.spinner("Generating AI draft..."):
                     try:
-                        # Phase 0.4D: RAG retrieval
+                        # Phase 0.5A: RAG retrieval with result storage
                         kb_context = ""
                         kb_used = False
+                        kb_results = []
                         
                         if st.session_state.get("rag_initialized"):
                             try:
@@ -958,12 +1015,16 @@ elif page == L["nav_crm"]:
                                 
                                 if results:
                                     kb_used = True
+                                    kb_results = results  # Store for display
                                     context_parts = []
                                     for i, result in enumerate(results, 1):
                                         context_parts.append(f"[Context {i}]\n{result['text']}")
                                     kb_context = "\n\n".join(context_parts)
                             except Exception as kb_error:
                                 st.caption(f"KB retrieval failed (continuing without context): {kb_error}")
+                        
+                        # Store KB results in session state for display
+                        st.session_state["crm_last_kb_results"] = kb_results
                         
                         # Build system prompt with KB context
                         system_prompt = CRM_SYSTEM_PROMPT
@@ -1039,6 +1100,20 @@ elif page == L["nav_crm"]:
         with action_col3:
             if st.button("Copy Reply", use_container_width=True):
                 st.toast("Reply copied (browser clipboard integration coming in Phase 0.5).")
+        
+        # Retrieved KB Context Display (Phase 0.5A)
+        if st.session_state.get("crm_last_kb_results"):
+            with st.expander("📚 Retrieved KB Context"):
+                for i, result in enumerate(st.session_state["crm_last_kb_results"], 1):
+                    filename = result['metadata'].get('file_name', 'unknown')
+                    distance = result.get('distance', 0.0)
+                    st.caption(f"**Source {i}:** {filename} (distance: {distance:.4f})")
+                    preview = result['text'][:500]
+                    if len(result['text']) > 500:
+                        preview += "..."
+                    st.write(preview)
+                    if i < len(st.session_state["crm_last_kb_results"]):
+                        st.divider()
 
     st.divider()
 

@@ -167,6 +167,68 @@ class RAGRetriever:
             "embedding_provider": self.embedder.__class__.__name__,
         }
     
+    def list_documents(self) -> List[Dict]:
+        """
+        List all indexed documents with summary info.
+        
+        Returns:
+            List of dicts with keys: file_name, chunk_count, indexed_at, file_type.
+        """
+        try:
+            all_docs = self.vector_store.get_all_documents()
+            if not all_docs:
+                return []
+            
+            # Group by filename
+            file_groups = {}
+            for doc in all_docs:
+                metadata = doc.get("metadata", {})
+                filename = metadata.get("file_name", "unknown")
+                
+                if filename not in file_groups:
+                    file_groups[filename] = {
+                        "file_name": filename,
+                        "chunk_count": 0,
+                        "indexed_at": metadata.get("indexed_at", ""),
+                        "file_type": Path(filename).suffix.lower() if filename != "unknown" else "",
+                    }
+                file_groups[filename]["chunk_count"] += 1
+            
+            return list(file_groups.values())
+        except Exception:
+            return []
+    
+    def re_index_document(
+        self,
+        file_path: Path,
+        metadata: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Re-index a document: delete old chunks and index new version.
+        
+        Args:
+            file_path: Path to the document file.
+            metadata: Optional metadata to attach to chunks.
+        
+        Returns:
+            Dict with keys: file_name, chunk_count, indexed_at, chunk_ids, status.
+        
+        Raises:
+            FileNotFoundError: If file does not exist.
+            ValueError: If file format is not supported.
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        # Delete old chunks
+        deleted_count = self.delete_document(file_path.name)
+        
+        # Index new version
+        result = self.index_document(file_path, metadata)
+        result["status"] = f"Re-indexed (deleted {deleted_count} old chunks)"
+        
+        return result
+    
     def clear_all(self) -> None:
         """Clear all documents from the vector store."""
         self.vector_store.clear()

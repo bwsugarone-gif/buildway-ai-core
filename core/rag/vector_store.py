@@ -138,6 +138,55 @@ class VectorStore:
         """Get total number of documents in the collection."""
         return self.collection.count()
     
+    def get_all_documents(self) -> List[Dict]:
+        """
+        Get all documents with metadata.
+        
+        Returns:
+            List of dicts with keys: id, text, metadata.
+        """
+        try:
+            results = self.collection.get()
+            if not results or not results["ids"]:
+                return []
+            
+            documents = []
+            for i in range(len(results["ids"])):
+                documents.append({
+                    "id": results["ids"][i],
+                    "text": results["documents"][i] if results["documents"] else "",
+                    "metadata": results["metadatas"][i] if results["metadatas"] else {},
+                })
+            return documents
+        except Exception:
+            return []
+    
+    def get_documents_by_filename(self, filename: str) -> List[Dict]:
+        """
+        Get all chunks for a specific filename.
+        
+        Args:
+            filename: Name of the file.
+        
+        Returns:
+            List of document dicts.
+        """
+        try:
+            results = self.collection.get(where={"file_name": filename})
+            if not results or not results["ids"]:
+                return []
+            
+            documents = []
+            for i in range(len(results["ids"])):
+                documents.append({
+                    "id": results["ids"][i],
+                    "text": results["documents"][i] if results["documents"] else "",
+                    "metadata": results["metadatas"][i] if results["metadatas"] else {},
+                })
+            return documents
+        except Exception:
+            return []
+    
     def clear(self) -> None:
         """Clear all documents from the collection."""
         self.client.delete_collection(name=self.collection.name)

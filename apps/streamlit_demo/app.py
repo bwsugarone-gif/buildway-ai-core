@@ -845,6 +845,8 @@ elif page == L["nav_crm"]:
         st.session_state["crm_reply_source"] = ""
     if "crm_message" not in st.session_state:
         st.session_state["crm_message"] = "Hi, what is your MOQ and delivery time?"
+    if "crm_kb_context_used" not in st.session_state:
+        st.session_state["crm_kb_context_used"] = False
 
     st.title("CRM AI Assist")
     st.caption(
@@ -918,6 +920,36 @@ elif page == L["nav_crm"]:
                 )
                 with st.spinner("Generating AI draft..."):
                     try:
+                        # Phase 0.4D: RAG retrieval
+                        kb_context = ""
+                        kb_used = False
+                        
+                        if st.session_state.get("rag_initialized"):
+                            try:
+                                retriever = st.session_state["rag_retriever"]
+                                results = retriever.search(customer_input, top_k=5)
+                                
+                                if results:
+                                    kb_used = True
+                                    context_parts = []
+                                    for i, result in enumerate(results, 1):
+                                        context_parts.append(f"[Context {i}]\n{result['text']}")
+                                    kb_context = "\n\n".join(context_parts)
+                            except Exception as kb_error:
+                                st.caption(f"KB retrieval failed (continuing without context): {kb_error}")
+                        
+                        # Build system prompt with KB context
+                        system_prompt = CRM_SYSTEM_PROMPT
+                        if kb_context:
+                            system_prompt = (
+                                "You are a professional foreign trade sales assistant. "
+                                "Use the company knowledge base when relevant. "
+                                "If the answer is not in the knowledge base, ask politely for clarification. "
+                                "Keep replies business-friendly and concise.\n\n"
+                                f"CONTEXT (from Knowledge Base):\n{kb_context}\n\n"
+                                "Generate a professional reply based on the customer message and context above."
+                            )
+                        
                         ai_result = call_ai_reply(
                             provider=selected_config.provider,
                             message=customer_input,
@@ -925,7 +957,7 @@ elif page == L["nav_crm"]:
                             model=selected_config.model,
                             base_url=selected_config.base_url,
                             endpoint_path=selected_config.endpoint_path,
-                            system_prompt=CRM_SYSTEM_PROMPT,
+                            system_prompt=system_prompt,
                         )
                         _show_ai_debug(ai_result.debug)
                         reply = ai_result.content
@@ -936,6 +968,7 @@ elif page == L["nav_crm"]:
                                 if selected_config.provider == "OpenAI-Compatible"
                                 else "OpenAI API"
                             )
+                            st.session_state["crm_kb_context_used"] = kb_used
                         else:
                             st.error("AI returned an empty response. Please try again.")
                     except Exception as e:
@@ -963,11 +996,14 @@ elif page == L["nav_crm"]:
                 unsafe_allow_html=True,
             )
 
-        action_col1, action_col2 = st.columns(2)
+        action_col1, action_col2, action_col3 = st.columns(3)
         with action_col1:
             src = st.session_state.get("crm_reply_source", "")
             st.caption(f"Source: {src}" if src else "")
         with action_col2:
+            kb_used = st.session_state.get("crm_kb_context_used", False)
+            st.caption(f"KB Context: {'Yes ✓' if kb_used else 'No'}")
+        with action_col3:
             if st.button("Copy Reply", use_container_width=True):
                 st.toast("Reply copied (browser clipboard integration coming in Phase 0.5).")
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 pages/whatsapp_demo.py
-Buildway AI Core — PHASE 0.5C
+Buildway AI Core — PHASE 0.5C (Hotfix: Chinese UI + nav buttons)
 Fake WhatsApp-style CRM chat UI (demo only, no real WhatsApp API).
 
 Design:
@@ -9,6 +9,7 @@ Design:
 - No webhook / websocket / login / realtime sync
 - Mobile-first, WhatsApp-style chat bubbles
 - Session state keys: wa_chat_history, wa_typing, wa_selected_example, wa_input
+- UI language: Traditional Chinese
 """
 
 import os
@@ -24,21 +25,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 import streamlit as st
 
 from core.agents.provider_router import (
-    AIProviderConfig,
     DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
     STATUS_CONNECTED,
     call_ai_reply,
     get_default_model,
     mask_sensitive_text,
     PROVIDER_OPENAI,
-    SUPPORTED_PROVIDERS,
 )
 
 # ──────────────────────────────────────────────
 # Page config
 # ──────────────────────────────────────────────
 st.set_page_config(
-    page_title="WhatsApp CRM Demo — Buildway",
+    page_title="WhatsApp CRM 示範 — Buildway",
     page_icon="💬",
     layout="centered",
 )
@@ -47,10 +46,10 @@ st.set_page_config(
 # Constants
 # ──────────────────────────────────────────────
 FAKE_MESSAGES = [
-    "What is your MOQ?",
-    "What are your shipping terms?",
-    "Can I order 200 units?",
-    "Do you offer FOB or EXW?",
+    "MOQ 幾多？",
+    "Shipping terms 係點？",
+    "200 件可唔可以落單？",
+    "FOB 定 EXW？",
 ]
 
 CRM_SYSTEM_PROMPT_BASE = (
@@ -87,14 +86,11 @@ CONFIDENCE_EMOJI = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}
 # ──────────────────────────────────────────────
 WA_CSS = """
 <style>
-/* Chat container */
 .wa-container {
     max-width: 520px;
     margin: 0 auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
 }
-
-/* Header bar */
 .wa-header {
     background: #075e54;
     color: white;
@@ -119,19 +115,14 @@ WA_CSS = """
 .wa-header-info { flex: 1; }
 .wa-header-name { font-weight: 600; font-size: 15px; }
 .wa-header-sub { font-size: 11px; opacity: 0.8; }
-
-/* Chat body */
 .wa-body {
     background: #e5ddd5;
     background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c4b9ad' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     padding: 12px 10px;
     min-height: 340px;
-    border-radius: 0;
     border-left: 1px solid #ccc;
     border-right: 1px solid #ccc;
 }
-
-/* Bubbles */
 .wa-bubble-row-customer {
     display: flex;
     justify-content: flex-start;
@@ -161,12 +152,7 @@ WA_CSS = """
     word-wrap: break-word;
 }
 .wa-bubble-text { font-size: 14px; line-height: 1.5; }
-.wa-bubble-time {
-    font-size: 10px;
-    color: #888;
-    text-align: right;
-    margin-top: 3px;
-}
+.wa-bubble-time { font-size: 10px; color: #888; text-align: right; margin-top: 3px; }
 .wa-bubble-meta {
     font-size: 10px;
     color: #666;
@@ -182,8 +168,6 @@ WA_CSS = """
     padding: 1px 5px;
     font-size: 10px;
 }
-
-/* Typing indicator */
 .wa-typing {
     display: flex;
     align-items: center;
@@ -191,10 +175,7 @@ WA_CSS = """
     padding: 8px 12px;
     margin: 2px 0 6px 0;
 }
-.wa-typing-dots {
-    display: flex;
-    gap: 3px;
-}
+.wa-typing-dots { display: flex; gap: 3px; }
 .wa-typing-dot {
     width: 7px;
     height: 7px;
@@ -209,17 +190,6 @@ WA_CSS = """
     40% { transform: translateY(-5px); }
 }
 .wa-typing-label { font-size: 11px; color: #555; font-style: italic; }
-
-/* Input area */
-.wa-input-area {
-    background: #f0f0f0;
-    padding: 8px 10px;
-    border-radius: 0 0 12px 12px;
-    border: 1px solid #ccc;
-    border-top: none;
-}
-
-/* Responsive */
 @media (max-width: 600px) {
     .wa-container { max-width: 100%; }
     .wa-bubble-customer, .wa-bubble-ai { max-width: 90%; }
@@ -231,7 +201,7 @@ WA_CSS = """
 # Helper functions
 # ──────────────────────────────────────────────
 
-def _get_ai_config() -> dict | None:
+def _get_ai_config():
     """Read AI config from shared session state. Returns None if not connected."""
     configs = st.session_state.get("ai_provider_configs", {})
     provider = st.session_state.get("ai_provider", PROVIDER_OPENAI)
@@ -251,7 +221,6 @@ def _get_rag_retriever():
 
 
 def _calculate_confidence(results: list) -> str:
-    """Calculate confidence from search results."""
     if not results:
         return "LOW"
     similarity = results[0].get("similarity")
@@ -265,14 +234,8 @@ def _calculate_confidence(results: list) -> str:
     return "LOW"
 
 
-def _generate_ai_reply(
-    customer_msg: str,
-    ai_cfg: dict,
-) -> dict:
-    """
-    Generate AI reply using existing CRM backend logic.
-    Returns dict: {text, source, kb_used, confidence, conflict_warning}
-    """
+def _generate_ai_reply(customer_msg: str, ai_cfg: dict) -> dict:
+    """Generate AI reply using existing CRM backend logic."""
     kb_context = ""
     kb_used = False
     confidence = "N/A"
@@ -285,25 +248,22 @@ def _generate_ai_reply(
             results = retriever.search(customer_msg, top_k=5)
             if results:
                 kb_used = True
-                # confidence
                 try:
-                    if hasattr(retriever, "calculate_confidence"):
-                        confidence = retriever.calculate_confidence(results)
-                    else:
-                        confidence = _calculate_confidence(results)
+                    confidence = (
+                        retriever.calculate_confidence(results)
+                        if hasattr(retriever, "calculate_confidence")
+                        else _calculate_confidence(results)
+                    )
                 except Exception:
                     confidence = _calculate_confidence(results)
-                # conflict detection
                 try:
                     if hasattr(retriever, "detect_conflicts"):
                         conflict_warning = retriever.detect_conflicts(results, customer_msg)
                 except Exception:
                     conflict_warning = None
-                # build context
                 context_parts = [f"[Context {i}]\n{r['text']}" for i, r in enumerate(results, 1)]
                 kb_context = "\n\n".join(context_parts)
-        except Exception as kb_err:
-            # Non-fatal: continue without KB
+        except Exception:
             kb_used = False
 
     system_prompt = (
@@ -342,7 +302,6 @@ def _format_timestamp() -> str:
 
 
 def _render_chat_bubble(msg: dict) -> str:
-    """Render a single chat bubble as HTML string."""
     role = msg["role"]
     text_escaped = (
         msg["text"]
@@ -362,20 +321,17 @@ def _render_chat_bubble(msg: dict) -> str:
   </div>
 </div>"""
     else:
-        # AI bubble
         confidence = msg.get("confidence", "N/A")
         kb_used = msg.get("kb_used", False)
         source = msg.get("source", "AI")
         conf_emoji = CONFIDENCE_EMOJI.get(confidence, "⚪")
-        kb_badge = "KB ✓" if kb_used else "No KB"
-
+        kb_badge = "KB ✓" if kb_used else "無 KB"
         meta_html = f"""
     <div class="wa-bubble-meta">
       <span class="wa-badge">{conf_emoji} {confidence}</span>
       <span class="wa-badge">{kb_badge}</span>
       <span class="wa-badge">{source}</span>
     </div>"""
-
         return f"""
 <div class="wa-bubble-row-ai">
   <div class="wa-bubble-ai">
@@ -395,7 +351,7 @@ def _render_typing_indicator() -> str:
       <div class="wa-typing-dot"></div>
       <div class="wa-typing-dot"></div>
     </div>
-    <span class="wa-typing-label">AI is typing...</span>
+    <span class="wa-typing-label">AI 正在輸入...</span>
   </div>
 </div>"""
 
@@ -420,15 +376,25 @@ ai_ready = ai_cfg is not None
 rag_ready = _get_rag_retriever() is not None
 
 # ──────────────────────────────────────────────
-# Page header
+# Top row: title + quick nav buttons
 # ──────────────────────────────────────────────
 st.markdown(WA_CSS, unsafe_allow_html=True)
 
-# Status banners (outside chat container)
+title_col, nav_col1, nav_col2 = st.columns([3, 1, 1])
+with title_col:
+    st.markdown("## 💬 WhatsApp CRM 示範")
+with nav_col1:
+    st.page_link("app.py", label="返回主頁 / CRM", icon="🏠")
+with nav_col2:
+    st.page_link("app.py", label="返回主頁 / Knowledge Base", icon="📚")
+
+# ──────────────────────────────────────────────
+# Status banners
+# ──────────────────────────────────────────────
 if not ai_ready:
-    st.warning("⚠️ Please configure and connect an AI Model first (AI Model Setup page).", icon="🤖")
+    st.warning("⚠️ 請先設定 AI Model（前往 AI Model 設定頁面配置並測試連線）。", icon="🤖")
 if not rag_ready:
-    st.info("ℹ️ Knowledge Base not initialized. AI will reply without KB context. Upload KB in the Knowledge Base page.", icon="📚")
+    st.info("ℹ️ Knowledge Base 尚未初始化，AI 將不使用公司資料回覆。請先到 Knowledge Base 上載文件。", icon="📚")
 
 # ──────────────────────────────────────────────
 # WhatsApp header bar
@@ -442,7 +408,7 @@ st.markdown(f"""
   <div class="wa-header">
     <div class="wa-header-avatar">👤</div>
     <div class="wa-header-info">
-      <div class="wa-header-name">Demo Customer</div>
+      <div class="wa-header-name">示範客戶</div>
       <div class="wa-header-sub">AI: {ai_status_dot} {provider_label} &nbsp;|&nbsp; KB: {kb_status_dot}</div>
     </div>
     <div style="font-size:22px;">💬</div>
@@ -458,7 +424,7 @@ chat_html_parts = ['<div class="wa-container"><div class="wa-body">']
 if not st.session_state["wa_chat_history"]:
     chat_html_parts.append(
         '<div style="text-align:center;color:#888;font-size:12px;padding:20px 0;">'
-        '💬 Start a conversation below</div>'
+        '💬 請在下方開始對話</div>'
     )
 else:
     for msg in st.session_state["wa_chat_history"]:
@@ -471,7 +437,7 @@ chat_html_parts.append('</div></div>')
 st.markdown("".join(chat_html_parts), unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
-# Conflict warning (outside chat, more visible)
+# Conflict warning
 # ──────────────────────────────────────────────
 if st.session_state["wa_chat_history"]:
     last_ai = next(
@@ -486,36 +452,36 @@ if st.session_state["wa_chat_history"]:
 # ──────────────────────────────────────────────
 st.markdown("---")
 
-# Example messages simulator
 with st.container():
-    st.caption("📨 Simulate Incoming Message")
+    st.caption("📨 模擬客戶訊息")
     sim_col1, sim_col2 = st.columns([4, 1])
     with sim_col1:
         selected_example = st.selectbox(
-            "Select example",
+            "選擇訊息",
             FAKE_MESSAGES,
             key="wa_selected_example",
             label_visibility="collapsed",
         )
     with sim_col2:
         simulate_clicked = st.button(
-            "Simulate",
+            "模擬",
             use_container_width=True,
-            help="Inject this as a customer message",
+            help="以此訊息模擬客戶來訊",
+            disabled=not ai_ready,
         )
 
-st.caption("✏️ Or type your own message")
+st.caption("✏️ 或輸入自訂訊息")
 input_col1, input_col2 = st.columns([5, 1])
 with input_col1:
     user_input = st.text_input(
-        "Message",
+        "訊息",
         key="wa_input",
-        placeholder="Type a message...",
+        placeholder="輸入訊息...",
         label_visibility="collapsed",
     )
 with input_col2:
     send_clicked = st.button(
-        "Send",
+        "發送",
         type="primary",
         use_container_width=True,
         disabled=not ai_ready,
@@ -523,7 +489,7 @@ with input_col2:
 
 clear_col1, clear_col2 = st.columns([5, 1])
 with clear_col2:
-    if st.button("Clear chat", use_container_width=True):
+    if st.button("清空對話", use_container_width=True):
         st.session_state["wa_chat_history"] = []
         st.session_state["wa_typing"] = False
         st.rerun()
@@ -532,12 +498,9 @@ with clear_col2:
 # Message processing
 # ──────────────────────────────────────────────
 def _process_message(customer_text: str) -> None:
-    """Add customer message, call AI, append AI reply."""
     customer_text = customer_text.strip()
     if not customer_text:
         return
-
-    # Append customer bubble
     st.session_state["wa_chat_history"].append({
         "role": "customer",
         "text": customer_text,
@@ -551,13 +514,12 @@ def _process_message(customer_text: str) -> None:
 
 
 def _finalize_ai_reply(customer_text: str) -> None:
-    """Called when wa_typing is True — execute AI call and append result."""
     ai_cfg_local = _get_ai_config()
     if not ai_cfg_local:
         st.session_state["wa_typing"] = False
         st.session_state["wa_chat_history"].append({
             "role": "ai",
-            "text": "⚠️ AI provider not connected. Please configure AI Model first.",
+            "text": "⚠️ AI 未連線，請先設定 AI Model。",
             "timestamp": _format_timestamp(),
             "source": "System",
             "kb_used": False,
@@ -570,7 +532,7 @@ def _finalize_ai_reply(customer_text: str) -> None:
         result = _generate_ai_reply(customer_text, ai_cfg_local)
         st.session_state["wa_chat_history"].append({
             "role": "ai",
-            "text": result["text"] or "(empty response)",
+            "text": result["text"] or "（空回覆）",
             "timestamp": _format_timestamp(),
             "source": result["source"],
             "kb_used": result["kb_used"],
@@ -581,7 +543,7 @@ def _finalize_ai_reply(customer_text: str) -> None:
         err_msg = mask_sensitive_text(str(e))
         st.session_state["wa_chat_history"].append({
             "role": "ai",
-            "text": f"❌ Error: {err_msg}",
+            "text": f"❌ 錯誤：{err_msg}",
             "timestamp": _format_timestamp(),
             "source": "System",
             "kb_used": False,
@@ -592,58 +554,56 @@ def _finalize_ai_reply(customer_text: str) -> None:
         st.session_state["wa_typing"] = False
 
 
-# Handle "typing" state — finalize pending AI reply
+# Handle typing state
 if st.session_state.get("wa_typing"):
-    # Find last customer message to reply to
     last_customer = next(
         (m["text"] for m in reversed(st.session_state["wa_chat_history"]) if m["role"] == "customer"),
         "",
     )
     if last_customer:
-        with st.spinner("AI is generating reply..."):
+        with st.spinner("AI 正在生成回覆..."):
             _finalize_ai_reply(last_customer)
         st.rerun()
     else:
         st.session_state["wa_typing"] = False
 
-# Handle simulate button
+# Handle simulate
 if simulate_clicked and ai_ready:
     _process_message(selected_example)
 
-# Handle send button or Enter
+# Handle send
 if send_clicked and user_input.strip():
     if not ai_ready:
-        st.warning("Please configure and connect an AI Model first.")
+        st.warning("請先設定 AI Model。")
     else:
         _process_message(user_input)
-        # Clear input by resetting key
         st.session_state["wa_input"] = ""
 
 # ──────────────────────────────────────────────
-# Footer info
+# Footer
 # ──────────────────────────────────────────────
 st.markdown("---")
-with st.expander("ℹ️ About this demo"):
+with st.expander("ℹ️ 關於此示範"):
     st.markdown("""
-**WhatsApp CRM Demo — PHASE 0.5C**
+**WhatsApp CRM 示範 — PHASE 0.5C**
 
-This is a **fake demo UI** for showcasing the CRM AI workflow in a WhatsApp-style interface.
+此為**示範介面**，用於展示 CRM AI 工作流程的 WhatsApp 風格 UI。
 
-**What's real:**
-- AI replies use your configured AI provider (OpenAI / Claude / Gemini / DeepSeek)
-- KB retrieval uses the same RAG system as the CRM page
-- Confidence scoring and conflict detection are fully functional
+**真實功能：**
+- AI 回覆使用已配置的 AI Provider（OpenAI / Claude / Gemini / DeepSeek）
+- KB 檢索使用與 CRM 頁面相同的 RAG 系統
+- 信心評分和衝突偵測功能完整
 
-**What's fake:**
-- No real WhatsApp API
-- No webhook, websocket, or realtime sync
-- No login or authentication
-- Customer messages are simulated
+**示範模擬：**
+- 不使用真實 WhatsApp API
+- 無 Webhook、WebSocket 或即時同步
+- 無登入或認證
+- 客戶訊息為模擬輸入
 
-**Chat bubble badges:**
-- 🟢 HIGH / 🟡 MEDIUM / 🔴 LOW — confidence score
-- KB ✓ / No KB — whether Knowledge Base was used
-- Source — AI provider used
+**AI 氣泡標籤：**
+- 🟢 HIGH / 🟡 MEDIUM / 🔴 LOW — 信心評分
+- KB ✓ / 無 KB — 是否使用了 Knowledge Base
+- Source — 使用的 AI Provider
 
-> Configure AI Model and Knowledge Base on their respective pages before using this demo.
+> 請先在對應頁面設定 AI Model 及上載 Knowledge Base 文件。
 """)

@@ -795,63 +795,84 @@ elif page == L["nav_kb"]:
     )
     
     if uploaded_files and st.session_state.get("rag_initialized"):
+        file_count = len(uploaded_files)
+        if file_count > 5:
+            st.warning(f"⚠️ 已選取 {file_count} 個文件，建議每次最多上載 5 個以確保穩定性。")
+        elif file_count > 3:
+            st.info("ℹ️ 大量文件索引可能需時，請勿關閉頁面。")
+
         if st.button("Index Uploaded Files", type="primary", key="index_files_btn"):
             from pathlib import Path
             import tempfile
             import traceback
-            
-            st.write("🔄 Starting indexing workflow...")
-            st.write(f"📁 Files to process: {len(uploaded_files)}")
-            
+
+            if file_count > 3:
+                st.warning("大量文件索引可能需時，請勿關閉頁面。")
+
             progress_bar = st.progress(0)
             status_text = st.empty()
-            
+
             indexed_count = 0
             failed_count = 0
-            
+            total_chunks = 0
+
             with st.spinner("Indexing documents..."):
                 for i, uploaded_file in enumerate(uploaded_files):
+                    status_text.text(f"Processing ({i+1}/{file_count}): {uploaded_file.name}")
                     try:
-                        st.write(f"📄 Indexing: **{uploaded_file.name}**")
-                        status_text.text(f"Processing {uploaded_file.name}...")
-                        
                         # Save to temp file
                         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
                             tmp_file.write(uploaded_file.getvalue())
                             tmp_path = Path(tmp_file.name)
-                        
-                        st.write(f"  → Temp file: {tmp_path}")
-                        
+
+                        # Developer debug info only
+                        if st.session_state.get("dev_mode", False):
+                            st.caption(f"🔧 Temp: {tmp_path}")
+
                         # Index document
-                        st.write(f"  → Calling index_document()...")
                         result = st.session_state["rag_retriever"].index_document(
                             file_path=tmp_path,
                             metadata={"source": "upload", "original_name": uploaded_file.name},
                         )
-                        
-                        st.write(f"  → Result: {result}")
-                        
+
+                        if st.session_state.get("dev_mode", False):
+                            st.caption(f"🔧 Result: {result}")
+
                         # Clean up temp file
                         tmp_path.unlink()
-                        
-                        st.success(f"✓ {uploaded_file.name}: {result['chunk_count']} chunks indexed")
+
+                        chunk_count = result.get("chunk_count", 0)
+                        total_chunks += chunk_count
+                        st.success(f"✓ {uploaded_file.name} — {chunk_count} chunks")
                         indexed_count += 1
-                        
+
                     except Exception as e:
                         failed_count += 1
-                        error_detail = traceback.format_exc()
                         st.error(f"✗ {uploaded_file.name}: {str(e)}")
-                        with st.expander("Error Details"):
-                            st.code(error_detail)
-                    
-                    progress_bar.progress((i + 1) / len(uploaded_files))
-                
-                status_text.text("Indexing complete!")
-                st.write(f"✅ Indexed: {indexed_count} | ❌ Failed: {failed_count}")
-                
-                if indexed_count > 0:
-                    st.info("Refreshing page to update stats...")
-                    st.rerun()
+                        if st.session_state.get("dev_mode", False):
+                            with st.expander("Error Details"):
+                                st.code(traceback.format_exc())
+
+                    progress_bar.progress((i + 1) / file_count)
+
+            status_text.text("")
+            # Summary
+            st.divider()
+            sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
+            with sum_col1:
+                st.metric("Total Files", file_count)
+            with sum_col2:
+                st.metric("Indexed", indexed_count)
+            with sum_col3:
+                st.metric("Failed", failed_count)
+            with sum_col4:
+                st.metric("Chunks Added", total_chunks)
+
+            if indexed_count > 0:
+                st.success(f"✅ Indexing complete — {indexed_count} file(s) indexed, {total_chunks} chunks added.")
+                st.rerun()
+            else:
+                st.error("No files were indexed successfully.")
     
     st.divider()
     
@@ -1027,7 +1048,7 @@ elif page == L["nav_crm"]:
         clear_clicked = st.button("Clear", use_container_width=True)
 
     if clear_clicked:
-        st.session_state["customer_message"] = ""
+        st.session_state.pop("customer_message", None)
         st.session_state["crm_reply"] = ""
         st.session_state["crm_reply_source"] = ""
         st.session_state["crm_kb_context_used"] = False

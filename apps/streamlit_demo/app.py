@@ -64,10 +64,23 @@ st.set_page_config(
 st.markdown(
     """
 <style>
+/* Hide Streamlit chrome — toolbar, header, footer, deploy/fork buttons */
 [data-testid="stToolbar"] {
     visibility: hidden;
     height: 0%;
     position: fixed;
+}
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+[data-testid="stHeader"] {
+    display: none !important;
+}
+.stDeployButton {
+    display: none !important;
+}
+button[kind="header"] {
+    display: none !important;
 }
 #MainMenu {
     visibility: hidden;
@@ -78,6 +91,7 @@ footer {
 header {
     visibility: hidden;
 }
+/* Sidebar navigation is NOT affected */
 </style>
 """,
     unsafe_allow_html=True,
@@ -94,40 +108,73 @@ LABELS = {
         "nav_db": "Database 設定",
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
-        "nav_logs": "Usage Logs",
+        "nav_logs": "使用記錄",
         "login_title": "Client Login Portal",
         "login_email": "Email",
-        "login_password": "Password",
+        "login_password": "密碼",
         "login_btn": "登入",
         "login_forgot": "忘記密碼？",
         "login_coming": "登入功能將於 Phase 0.4 推出。",
         "login_demo_note": "Demo 模式：無需登入。",
-        "company_name": "Company Name",
-        "industry": "Industry",
-        "contact_email": "Contact Email",
-        "channel": "Default Channel",
-        "save_profile": "儲存 Tenant 資料",
-        "ai_provider": "AI Provider",
-        "model_name": "Model Name",
+        "company_name": "公司名稱",
+        "industry": "行業",
+        "contact_email": "聯絡 Email",
+        "channel": "預設渠道",
+        "save_profile": "儲存客戶資料",
+        "ai_provider": "AI 供應商",
+        "model_name": "模型名稱",
         "api_key": "API Key",
         "base_url": "Base URL",
         "save_ai": "儲存 AI 設定",
-        "db_mode": "Database 模式",
+        "test_connection": "測試連線",
+        "db_mode": "資料庫模式",
         "db_hosted": "Buildway Hosted",
-        "db_client": "Client Existing Database API",
-        "db_url": "Database URL",
+        "db_client": "自備資料庫 API",
+        "db_provider": "資料庫供應商",
+        "db_url": "資料庫 URL",
         "service_key": "API Key / Service Key",
-        "readonly_ep": "Read-only API Endpoint（選填）",
+        "readonly_ep": "唯讀 API Endpoint（選填）",
         "notes": "備註",
         "qdrant_url": "Qdrant URL",
         "qdrant_key": "Qdrant API Key",
-        "collection": "Collection Name",
-        "save_db": "儲存 Database 設定",
-        "customer_ref": "Customer Ref",
-        "customer_msg": "Customer Message",
-        "save_session": "儲存 Customer Session",
-        "cost_model_title": "SaaS Cost Model",
-        "platform_summary": "Platform Summary",
+        "collection": "Collection 名稱",
+        "save_db": "儲存資料庫設定",
+        "customer_ref": "客戶編號",
+        "customer_msg": "客戶訊息",
+        "save_session": "儲存對話紀錄",
+        "cost_model_title": "SaaS 收費方案",
+        "platform_summary": "平台簡介",
+        # CRM
+        "crm_title": "CRM AI 助手",
+        "current_ai_status": "目前 AI 狀態",
+        "connection_status": "連線狀態",
+        "provider_label": "供應商",
+        "model_label": "模型",
+        "customer_message": "客戶訊息",
+        "generate_reply": "生成 AI 回覆",
+        "clear": "清除",
+        "draft_reply": "回覆草稿",
+        "copy_reply": "複製回覆",
+        "customer_memory": "客戶記憶",
+        # KB
+        "kb_upload_title": "上載文件",
+        "kb_upload_formats": "支援格式：PDF、TXT、DOCX、MD、CSV",
+        "kb_upload_label": "上載知識庫文件",
+        "kb_index_btn": "建立索引",
+        "kb_indexed_title": "已建立索引文件",
+        "kb_search_title": "搜尋知識庫",
+        "kb_search_btn": "搜尋知識庫",
+        "kb_search_placeholder": "例如：MOQ 幾多？",
+        "kb_total_chunks": "向量資料庫 Chunk 總數",
+        "kb_status_ready": "就緒",
+        "kb_status_empty": "空白",
+        # Logs
+        "logs_empty": "AI Model 連線後將顯示使用記錄。",
+        "logs_date": "日期",
+        "logs_tenant": "Tenant",
+        "logs_provider": "供應商",
+        "logs_tokens": "Token 使用量",
+        "logs_cost": "預估成本 (USD)",
     },
     "简体中文": {
         "nav_home": "主页",
@@ -136,40 +183,70 @@ LABELS = {
         "nav_db": "Database 设置",
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
-        "nav_logs": "Usage Logs",
+        "nav_logs": "使用记录",
         "login_title": "Client Login Portal",
         "login_email": "Email",
-        "login_password": "Password",
+        "login_password": "密码",
         "login_btn": "登录",
         "login_forgot": "忘记密码？",
         "login_coming": "登录功能将于 Phase 0.4 推出。",
         "login_demo_note": "Demo 模式：无需登录。",
-        "company_name": "Company Name",
-        "industry": "Industry",
-        "contact_email": "Contact Email",
-        "channel": "Default Channel",
-        "save_profile": "保存 Tenant 资料",
-        "ai_provider": "AI Provider",
-        "model_name": "Model Name",
+        "company_name": "公司名称",
+        "industry": "行业",
+        "contact_email": "联系 Email",
+        "channel": "默认渠道",
+        "save_profile": "保存客户资料",
+        "ai_provider": "AI 供应商",
+        "model_name": "模型名称",
         "api_key": "API Key",
         "base_url": "Base URL",
         "save_ai": "保存 AI 设置",
-        "db_mode": "Database 模式",
+        "test_connection": "测试连接",
+        "db_mode": "数据库模式",
         "db_hosted": "Buildway Hosted",
-        "db_client": "Client Existing Database API",
-        "db_url": "Database URL",
+        "db_client": "自有数据库 API",
+        "db_provider": "数据库供应商",
+        "db_url": "数据库 URL",
         "service_key": "API Key / Service Key",
-        "readonly_ep": "Read-only API Endpoint（选填）",
+        "readonly_ep": "只读 API Endpoint（选填）",
         "notes": "备注",
         "qdrant_url": "Qdrant URL",
         "qdrant_key": "Qdrant API Key",
-        "collection": "Collection Name",
-        "save_db": "保存 Database 设置",
-        "customer_ref": "Customer Ref",
-        "customer_msg": "Customer Message",
-        "save_session": "保存 Customer Session",
-        "cost_model_title": "SaaS Cost Model",
-        "platform_summary": "Platform Summary",
+        "collection": "Collection 名称",
+        "save_db": "保存数据库设置",
+        "customer_ref": "客户编号",
+        "customer_msg": "客户消息",
+        "save_session": "保存对话记录",
+        "cost_model_title": "SaaS 收费方案",
+        "platform_summary": "平台简介",
+        "crm_title": "CRM AI 助手",
+        "current_ai_status": "当前 AI 状态",
+        "connection_status": "连接状态",
+        "provider_label": "供应商",
+        "model_label": "模型",
+        "customer_message": "客户消息",
+        "generate_reply": "生成 AI 回复",
+        "clear": "清除",
+        "draft_reply": "回复草稿",
+        "copy_reply": "复制回复",
+        "customer_memory": "客户记忆",
+        "kb_upload_title": "上传文件",
+        "kb_upload_formats": "支持格式：PDF、TXT、DOCX、MD、CSV",
+        "kb_upload_label": "上传知识库文件",
+        "kb_index_btn": "建立索引",
+        "kb_indexed_title": "已建立索引文件",
+        "kb_search_title": "搜索知识库",
+        "kb_search_btn": "搜索知识库",
+        "kb_search_placeholder": "例如：MOQ 多少？",
+        "kb_total_chunks": "向量数据库 Chunk 总数",
+        "kb_status_ready": "就绪",
+        "kb_status_empty": "空白",
+        "logs_empty": "AI Model 连接后将显示使用记录。",
+        "logs_date": "日期",
+        "logs_tenant": "Tenant",
+        "logs_provider": "供应商",
+        "logs_tokens": "Token 使用量",
+        "logs_cost": "预估成本 (USD)",
     },
     "English": {
         "nav_home": "Home",
@@ -196,9 +273,11 @@ LABELS = {
         "api_key": "API Key",
         "base_url": "Base URL",
         "save_ai": "Save AI Config",
+        "test_connection": "Test Connection",
         "db_mode": "Database Mode",
         "db_hosted": "Buildway Hosted",
         "db_client": "Client Existing Database API",
+        "db_provider": "Database Provider",
         "db_url": "Database URL",
         "service_key": "API Key / Service Key",
         "readonly_ep": "Read-only API Endpoint (optional)",
@@ -212,6 +291,34 @@ LABELS = {
         "save_session": "Save Customer Session",
         "cost_model_title": "SaaS Cost Model",
         "platform_summary": "Platform Summary",
+        "crm_title": "CRM AI Assist",
+        "current_ai_status": "Current AI Status",
+        "connection_status": "Connection Status",
+        "provider_label": "Provider",
+        "model_label": "Model",
+        "customer_message": "Customer Message",
+        "generate_reply": "Generate Draft Reply",
+        "clear": "Clear",
+        "draft_reply": "Draft Reply",
+        "copy_reply": "Copy Reply",
+        "customer_memory": "Customer Memory",
+        "kb_upload_title": "Upload Documents",
+        "kb_upload_formats": "Supported formats: PDF, TXT, DOCX, MD, CSV",
+        "kb_upload_label": "Upload Knowledge Base Documents",
+        "kb_index_btn": "Index Uploaded Files",
+        "kb_indexed_title": "Indexed Documents",
+        "kb_search_title": "Search Knowledge Base",
+        "kb_search_btn": "Search KB",
+        "kb_search_placeholder": "e.g., What is MOQ?",
+        "kb_total_chunks": "Total chunks in vector database",
+        "kb_status_ready": "Ready",
+        "kb_status_empty": "Empty",
+        "logs_empty": "Usage logs will be populated once AI Model is connected.",
+        "logs_date": "Date",
+        "logs_tenant": "Tenant",
+        "logs_provider": "Provider",
+        "logs_tokens": "Tokens Used",
+        "logs_cost": "Estimated Cost (USD)",
     },
 }
 
@@ -625,7 +732,7 @@ elif page == L["nav_ai"]:
         )
 
         save_ai = st.form_submit_button(L["save_ai"], disabled=not provider_available)
-        test_ai = st.form_submit_button("Test Connection", disabled=not provider_available)
+        test_ai = st.form_submit_button(L["test_connection"], disabled=not provider_available)
 
     next_api_key = api_key_input or provider_config.api_key
     next_base_url = base_url_input if provider_requires_base_url(provider) else ""
@@ -722,7 +829,7 @@ elif page == L["nav_ai"]:
     with c2:
         st.metric(L["model_name"], provider_config.model or "Not set")
     with c3:
-        st.metric("Connection Status", provider_config.connection_status)
+        st.metric(L["connection_status"], provider_config.connection_status)
     if provider_requires_base_url(provider):
         st.caption(f"Base URL: `{provider_config.base_url or 'Not set'}`")
         st.caption(f"Endpoint Path: `{provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH}`")
@@ -832,11 +939,11 @@ elif page == L["nav_kb"]:
             stats = st.session_state["rag_retriever"].get_stats()
             kb_col1, kb_col2, kb_col3 = st.columns(3)
             with kb_col1:
-                st.metric("Total Chunks", stats["total_chunks"])
+                st.metric(L["kb_total_chunks"], stats["total_chunks"])
             with kb_col2:
                 st.metric("Embedding Provider", stats["embedding_provider"].replace("Embedder", ""))
             with kb_col3:
-                st.metric("Status", "Ready" if stats["total_chunks"] > 0 else "Empty")
+                st.metric("狀態", L["kb_status_ready"] if stats["total_chunks"] > 0 else L["kb_status_empty"])
         except Exception as e:
             st.error(f"Failed to load KB stats: {e}")
     else:
@@ -846,11 +953,11 @@ elif page == L["nav_kb"]:
     st.divider()
     
     # Upload Section
-    st.subheader("Upload Documents")
-    st.caption("Supported formats: PDF, TXT, DOCX, MD, CSV")
+    st.subheader(L["kb_upload_title"])
+    st.caption(L["kb_upload_formats"])
     
     uploaded_files = st.file_uploader(
-        "Upload Knowledge Base Documents",
+        L["kb_upload_label"],
         type=["pdf", "txt", "docx", "md", "csv"],
         accept_multiple_files=True,
         key="kb_uploader",
@@ -863,7 +970,7 @@ elif page == L["nav_kb"]:
         elif file_count > 3:
             st.info("ℹ️ 大量文件索引可能需時，請勿關閉頁面。")
 
-        if st.button("Index Uploaded Files", type="primary", key="index_files_btn"):
+        if st.button(L["kb_index_btn"], type="primary", key="index_files_btn"):
             from pathlib import Path
             import tempfile
             import traceback
@@ -939,7 +1046,7 @@ elif page == L["nav_kb"]:
     st.divider()
     
     # Indexed Documents List
-    st.subheader("Indexed Documents")
+    st.subheader(L["kb_indexed_title"])
     
     if st.session_state.get("rag_initialized"):
         try:
@@ -947,9 +1054,9 @@ elif page == L["nav_kb"]:
             documents = st.session_state["rag_retriever"].list_documents()
             
             if stats["total_chunks"] == 0:
-                st.info("No documents indexed yet. Upload documents above to get started.")
+                st.info("尚未建立索引。請在上方上載文件。")
             else:
-                st.caption(f"Total chunks in vector database: {stats['total_chunks']}")
+                st.caption(f"{L['kb_total_chunks']}: {stats['total_chunks']}")
                 
                 # Document list with management buttons
                 for doc in documents:
@@ -986,16 +1093,16 @@ elif page == L["nav_kb"]:
     st.divider()
     
     # KB Search Test Box
-    st.subheader("Search Knowledge Base")
+    st.subheader(L["kb_search_title"])
     
     if st.session_state.get("rag_initialized"):
         search_col1, search_col2 = st.columns([4, 1])
         with search_col1:
-            search_query = st.text_input("Search query", placeholder="e.g., What is MOQ?", key="kb_search_query")
+            search_query = st.text_input(L["kb_search_title"], placeholder=L["kb_search_placeholder"], label_visibility="collapsed", key="kb_search_query")
         with search_col2:
             top_k = st.number_input("Top K", min_value=1, max_value=10, value=5, key="kb_search_top_k")
         
-        if st.button("Search KB", key="kb_search_btn"):
+        if st.button(L["kb_search_btn"], key="kb_search_btn"):
             if search_query:
                 try:
                     with st.spinner("Searching..."):
@@ -1060,22 +1167,22 @@ elif page == L["nav_crm"]:
     if "crm_kb_context_used" not in st.session_state:
         st.session_state["crm_kb_context_used"] = False
 
-    st.title("CRM AI Assist")
+    st.title(L["crm_title"])
     st.caption(
-        "Tenant: Demo Trading Company  |  Industry: Foreign Trade  |  Channel: WhatsApp"
+        "Tenant: Demo Trading Company  |  行業: Foreign Trade  |  渠道: WhatsApp"
     )
 
     # ── AI status banner ──────────────────────────
     selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
     ai_connected = selected_config.connection_status == STATUS_CONNECTED
-    st.subheader("Current AI Status")
+    st.subheader(L["current_ai_status"])
     status_col1, status_col2, status_col3 = st.columns(3)
     with status_col1:
-        st.metric("Provider", selected_config.provider)
+        st.metric(L["provider_label"], selected_config.provider)
     with status_col2:
-        st.metric("Model", selected_config.model or "Not set")
+        st.metric(L["model_label"], selected_config.model or "Not set")
     with status_col3:
-        st.metric("Connection Status", selected_config.connection_status)
+        st.metric(L["connection_status"], selected_config.connection_status)
     if ai_connected:
         st.success(
             f"AI Provider connected: **{st.session_state.get('ai_provider')}** — "
@@ -1089,25 +1196,25 @@ elif page == L["nav_crm"]:
         st.warning(CONNECTION_REQUIRED_MESSAGE)
 
     # ── Customer message input ────────────────────
-    st.subheader("Customer Message")
+    st.subheader(L["customer_message"])
     customer_input = st.text_area(
-        "Customer Message",
+        L["customer_message"],
         key="customer_message",
         height=200,
         label_visibility="collapsed",
-        placeholder="Paste customer inquiry here...",
+        placeholder="請貼上客戶訊息...",
     )
 
     btn_col1, btn_col2 = st.columns([3, 1])
     with btn_col1:
         generate_clicked = st.button(
-            "Generate Draft Reply",
+            L["generate_reply"],
             type="primary",
             use_container_width=True,
             disabled=not ai_connected,
         )
     with btn_col2:
-        clear_clicked = st.button("Clear", use_container_width=True)
+        clear_clicked = st.button(L["clear"], use_container_width=True)
 
     if clear_clicked:
         st.session_state.pop("customer_message", None)
@@ -1244,7 +1351,7 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
     # ── Draft reply output panel ──────────────────
     if st.session_state["crm_reply"]:
         st.divider()
-        st.subheader("Draft Reply")
+        st.subheader(L["draft_reply"])
 
         with st.container(border=True):
             st.markdown(
@@ -1271,16 +1378,16 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
             }.get(confidence, "⚪")
             st.caption(f"Confidence: {confidence_emoji} {confidence}")
         with action_col4:
-            if st.button("Copy Reply", use_container_width=True):
-                st.toast("Reply copied (browser clipboard integration coming in Phase 0.5).")
+            if st.button(L["copy_reply"], use_container_width=True):
+                st.toast("已複製回覆（瀏覽器 clipboard 整合將在 Phase 0.5 推出）。")
         
         # Conflict Warning Display
         if st.session_state.get("crm_conflict_warning"):
             st.warning(st.session_state["crm_conflict_warning"])
         
-        # Retrieved KB Context Display (Phase 0.5A with debug info)
-        if st.session_state.get("crm_last_kb_results"):
-            with st.expander("📚 Retrieved KB Context (Debug)"):
+        # Retrieved KB Context — Developer Mode only
+        if st.session_state.get("crm_last_kb_results") and st.session_state.get("dev_mode", False):
+            with st.expander("🔧 Retrieved KB Context (Developer Mode)"):
                 for i, result in enumerate(st.session_state["crm_last_kb_results"], 1):
                     filename = result['metadata'].get('file_name', 'unknown')
                     distance = result.get('distance', 0.0)
@@ -1310,15 +1417,15 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
     st.divider()
 
     # ── Customer memory panel ─────────────────────
-    st.subheader("Customer Memory")
+    st.subheader(L["customer_memory"])
     mem_col1, mem_col2, mem_col3 = st.columns(3)
     with mem_col1:
-        st.text_area("Customer Summary", value="(Not connected)", height=80, disabled=True)
+        st.text_area("客戶摘要", value="（尚未連線）", height=80, disabled=True)
     with mem_col2:
-        st.text_area("Last Inquiry", value="(Not connected)", height=80, disabled=True)
+        st.text_area("上次查詢", value="（尚未連線）", height=80, disabled=True)
     with mem_col3:
-        st.text_area("Follow-up Status", value="(Not connected)", height=80, disabled=True)
-    st.caption("Customer memory will be stored per tenant_id in Supabase in Phase 1.")
+        st.text_area("跟進狀態", value="（尚未連線）", height=80, disabled=True)
+    st.caption("Phase 1 將按 tenant_id 儲存至 Supabase。")
 
     st.divider()
 
@@ -1361,19 +1468,17 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
 # ──────────────────────────────────────────────
 elif page == L["nav_logs"]:
     st.title(L["nav_logs"])
-    st.info("Usage logs will be populated once AI Model is connected.")
+    st.info(L["logs_empty"])
 
     import pandas as pd
     st.dataframe(
         pd.DataFrame({
-            "Date": ["—", "—", "—"],
-            "Tenant": ["Demo Trading Company", "—", "—"],
-            "Provider": ["OpenAI", "—", "—"],
-            "Tokens Used": [0, 0, 0],
-            "Estimated Cost (USD)": [0.00, 0.00, 0.00],
+            L["logs_date"]: ["—", "—", "—"],
+            L["logs_tenant"]: ["Demo Trading Company", "—", "—"],
+            L["logs_provider"]: ["OpenAI", "—", "—"],
+            L["logs_tokens"]: [0, 0, 0],
+            L["logs_cost"]: [0.00, 0.00, 0.00],
         }),
         use_container_width=True,
     )
-    st.caption(
-        "In production, usage_logs table in Supabase tracks all API calls per tenant_id."
-    )
+    st.caption("正式版將透過 Supabase usage_logs 資料表追蹤每個 tenant_id 的 API 用量。")

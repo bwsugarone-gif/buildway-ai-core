@@ -43,6 +43,26 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────────
+# Hide Streamlit chrome (toolbar, header, footer, deploy/fork)
+# Sidebar navigation is NOT affected.
+# ──────────────────────────────────────────────
+st.markdown(
+    """
+<style>
+[data-testid="stToolbar"] { visibility: hidden; height: 0%; position: fixed; }
+[data-testid="stDecoration"] { display: none !important; }
+[data-testid="stHeader"] { display: none !important; }
+.stDeployButton { display: none !important; }
+button[kind="header"] { display: none !important; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ──────────────────────────────────────────────
 # Constants
 # ──────────────────────────────────────────────
 FAKE_MESSAGES = [

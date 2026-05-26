@@ -58,6 +58,32 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────────
+# Hide Streamlit toolbar / header / footer
+# Sidebar navigation is NOT affected.
+# ──────────────────────────────────────────────
+st.markdown(
+    """
+<style>
+[data-testid="stToolbar"] {
+    visibility: hidden;
+    height: 0%;
+    position: fixed;
+}
+#MainMenu {
+    visibility: hidden;
+}
+footer {
+    visibility: hidden;
+}
+header {
+    visibility: hidden;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+# ──────────────────────────────────────────────
 # UI Dictionary (i18n skeleton)
 # ──────────────────────────────────────────────
 LABELS = {
@@ -220,6 +246,7 @@ with st.sidebar:
             L["nav_logs"],
         ],
         label_visibility="collapsed",
+        key="nav_radio",
     )
     
     st.divider()
@@ -386,21 +413,55 @@ def _calculate_confidence_fallback(results: list) -> str:
 # ──────────────────────────────────────────────
 if page == L["nav_home"]:
     st.title("Buildway AI Core")
-    st.caption("Buildway Tech (HK) Limited — Multi-industry AI SaaS Platform")
+    st.caption("Buildway Tech (HK) Limited — 多行業 AI SaaS 平台，讓企業用自己的資料驅動 AI 回覆。")
 
-    # 1. Client Login Portal
-    st.subheader(L["login_title"])
-    with st.container(border=True):
-        st.warning(L["login_coming"])
-        st.caption(L["login_demo_note"])
-        login_col1, login_col2 = st.columns(2)
-        with login_col1:
-            st.text_input(L["login_email"], placeholder="admin@yourcompany.com", disabled=True)
-        with login_col2:
-            st.text_input(L["login_password"], type="password", placeholder="••••••••", disabled=True)
-        st.button(L["login_btn"], disabled=True)
-        st.markdown(f"_{L['login_forgot']}_")
-        st.markdown("""
+    st.divider()
+
+    # 3 entry cards
+    card_col1, card_col2, card_col3 = st.columns(3)
+
+    with card_col1:
+        with st.container(border=True):
+            st.markdown("### ⚙️ AI Model 設定")
+            st.caption("連接 OpenAI、Claude、Gemini 或 DeepSeek，輸入 API Key 並測試連線。")
+            if st.button("前往 AI Model 設定", use_container_width=True, key="home_btn_ai"):
+                st.session_state["nav_radio"] = L["nav_ai"]
+                st.rerun()
+
+    with card_col2:
+        with st.container(border=True):
+            st.markdown("### 📚 Knowledge Base（公司知識庫）")
+            st.caption("上載 FAQ、產品資料、Shipping Terms、Payment Terms，讓 AI 根據公司資料回覆。")
+            if st.button("前往 Knowledge Base", use_container_width=True, key="home_btn_kb"):
+                st.session_state["nav_radio"] = L["nav_kb"]
+                st.rerun()
+
+    with card_col3:
+        with st.container(border=True):
+            st.markdown("### 💬 CRM / WhatsApp Demo")
+            st.caption("模擬客戶訊息，由 AI 根據知識庫生成專業回覆草稿，支援 WhatsApp 風格介面。")
+            if st.button("前往 CRM / WhatsApp Demo", use_container_width=True, key="home_btn_crm"):
+                st.session_state["nav_radio"] = L["nav_crm"]
+                st.rerun()
+
+    # Developer Mode: show full platform details
+    if st.session_state.get("dev_mode", False):
+        st.divider()
+        st.caption("🔧 Developer Mode — 完整平台資訊")
+
+        # Client Login Portal
+        st.subheader(L["login_title"])
+        with st.container(border=True):
+            st.warning(L["login_coming"])
+            st.caption(L["login_demo_note"])
+            login_col1, login_col2 = st.columns(2)
+            with login_col1:
+                st.text_input(L["login_email"], placeholder="admin@yourcompany.com", disabled=True)
+            with login_col2:
+                st.text_input(L["login_password"], type="password", placeholder="••••••••", disabled=True)
+            st.button(L["login_btn"], disabled=True)
+            st.markdown(f"_{L['login_forgot']}_")
+            st.markdown("""
 Coming in Phase 0.4:
 - Admin login
 - Staff login
@@ -408,19 +469,19 @@ Coming in Phase 0.4:
 - Role-based permission
 """)
 
-    st.divider()
+        st.divider()
 
-    # 2. Platform Summary
-    st.subheader(L["platform_summary"])
-    st.markdown(
-        "Buildway AI Core is a general AI operation platform supporting multiple industry verticals. "
-        "Each client runs as an isolated Tenant with their own Knowledge Base, AI Model API key, "
-        "and CRM workflow."
-    )
+        # Platform Summary
+        st.subheader(L["platform_summary"])
+        st.markdown(
+            "Buildway AI Core is a general AI operation platform supporting multiple industry verticals. "
+            "Each client runs as an isolated Tenant with their own Knowledge Base, AI Model API key, "
+            "and CRM workflow."
+        )
 
-    # 3. Core Modules
-    st.subheader("Core Modules")
-    st.markdown("""
+        # Core Modules
+        st.subheader("Core Modules")
+        st.markdown("""
 | Module | Path | Description |
 |---|---|---|
 | Session Memory | `core/memory/base.py` | Tenant-isolated session storage |
@@ -433,9 +494,9 @@ Coming in Phase 0.4:
 | Workflow Tracker | `core/workflow/` | Workflow step tracking |
 """)
 
-    # 4. Verticals
-    st.subheader("Verticals")
-    st.markdown("""
+        # Verticals
+        st.subheader("Verticals")
+        st.markdown("""
 | Vertical | Path | Status |
 |---|---|---|
 | CRM | `verticals/crm/` | Active Demo |
@@ -444,12 +505,12 @@ Coming in Phase 0.4:
 | ERP | `verticals/erp/` | Placeholder |
 """)
 
-    st.divider()
+        st.divider()
 
-    # 5. SaaS Cost Model (bottom)
-    st.subheader(L["cost_model_title"])
-    with st.container(border=True):
-        st.markdown("""
+        # SaaS Cost Model
+        st.subheader(L["cost_model_title"])
+        with st.container(border=True):
+            st.markdown("""
 **A. Buildway Hosted**
 Buildway provides hosting, Tenant database, Vector DB and platform maintenance.
 Client pays monthly SaaS fee. Usage beyond included quota may be charged separately.
@@ -746,8 +807,9 @@ elif page == L["nav_db"]:
 # Page: Knowledge Base (Phase 0.4D — Real RAG)
 # ──────────────────────────────────────────────
 elif page == L["nav_kb"]:
-    st.title(L["nav_kb"])
-    
+    st.title("Knowledge Base（公司知識庫）")
+    st.caption("上載 FAQ、產品資料、Shipping Terms、Payment Terms，讓 AI 根據公司資料回覆。")
+
     # Initialize RAG retriever in session state
     if "rag_retriever" not in st.session_state:
         try:

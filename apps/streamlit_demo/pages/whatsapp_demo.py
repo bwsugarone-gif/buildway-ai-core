@@ -36,31 +36,57 @@ from core.agents.provider_router import (
 # ──────────────────────────────────────────────
 # Page config
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Global CSS injection — hides Streamlit chrome
+# Sidebar navigation is NOT affected.
+# ──────────────────────────────────────────────
+def inject_global_css() -> None:
+    """Inject CSS to hide all Streamlit toolbar/header/footer/deploy/fork chrome."""
+    st.markdown(
+        """
+<style>
+header {visibility:hidden;}
+footer {visibility:hidden;}
+#MainMenu {visibility:hidden;}
+
+[data-testid="stToolbar"] {
+    display:none !important;
+    visibility:hidden !important;
+}
+[data-testid="stDecoration"] {
+    display:none !important;
+}
+[data-testid="stHeader"] {
+    display:none !important;
+}
+.stDeployButton {
+    display:none !important;
+}
+button[kind="header"] {
+    display:none !important;
+}
+[data-testid="baseButton-headerNoPadding"] {
+    display:none !important;
+}
+[data-testid="stStatusWidget"] {
+    display:none !important;
+}
+iframe {
+    border:none !important;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(
     page_title="WhatsApp CRM 示範 — Buildway",
     page_icon="💬",
     layout="centered",
 )
 
-# ──────────────────────────────────────────────
-# Hide Streamlit chrome (toolbar, header, footer, deploy/fork)
-# Sidebar navigation is NOT affected.
-# ──────────────────────────────────────────────
-st.markdown(
-    """
-<style>
-[data-testid="stToolbar"] { visibility: hidden; height: 0%; position: fixed; }
-[data-testid="stDecoration"] { display: none !important; }
-[data-testid="stHeader"] { display: none !important; }
-.stDeployButton { display: none !important; }
-button[kind="header"] { display: none !important; }
-#MainMenu { visibility: hidden; }
-footer { visibility: hidden; }
-header { visibility: hidden; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+inject_global_css()
 
 # ──────────────────────────────────────────────
 # Constants

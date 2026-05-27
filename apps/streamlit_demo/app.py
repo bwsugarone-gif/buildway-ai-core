@@ -51,51 +51,63 @@ from core.agents.provider_router import (
     validate_config,
 )
 
+# ──────────────────────────────────────────────
+# Global CSS injection — hides Streamlit chrome
+# Sidebar navigation is NOT affected.
+# ──────────────────────────────────────────────
+def inject_global_css() -> None:
+    """Inject CSS to hide all Streamlit toolbar/header/footer/deploy/fork chrome."""
+    st.markdown(
+        """
+<style>
+header {visibility:hidden;}
+footer {visibility:hidden;}
+#MainMenu {visibility:hidden;}
+
+[data-testid="stToolbar"] {
+    display:none !important;
+    visibility:hidden !important;
+}
+[data-testid="stDecoration"] {
+    display:none !important;
+}
+[data-testid="stHeader"] {
+    display:none !important;
+}
+.stDeployButton {
+    display:none !important;
+}
+button[kind="header"] {
+    display:none !important;
+}
+[data-testid="baseButton-headerNoPadding"] {
+    display:none !important;
+}
+[data-testid="stStatusWidget"] {
+    display:none !important;
+}
+iframe {
+    border:none !important;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
 st.set_page_config(
     page_title="Buildway AI Core",
     page_icon="🤖",
     layout="wide",
 )
 
-# ──────────────────────────────────────────────
-# Hide Streamlit toolbar / header / footer
-# Sidebar navigation is NOT affected.
-# ──────────────────────────────────────────────
-st.markdown(
-    """
-<style>
-/* Hide Streamlit chrome — toolbar, header, footer, deploy/fork buttons */
-[data-testid="stToolbar"] {
-    visibility: hidden;
-    height: 0%;
-    position: fixed;
-}
-[data-testid="stDecoration"] {
-    display: none !important;
-}
-[data-testid="stHeader"] {
-    display: none !important;
-}
-.stDeployButton {
-    display: none !important;
-}
-button[kind="header"] {
-    display: none !important;
-}
-#MainMenu {
-    visibility: hidden;
-}
-footer {
-    visibility: hidden;
-}
-header {
-    visibility: hidden;
-}
-/* Sidebar navigation is NOT affected */
-</style>
-""",
-    unsafe_allow_html=True,
-)
+inject_global_css()
+
+# ── One-time UI cache clear ───────────────────
+if st.session_state.get("force_ui_refresh", True):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.session_state["force_ui_refresh"] = False
 
 # ──────────────────────────────────────────────
 # UI Dictionary (i18n skeleton)
@@ -358,11 +370,14 @@ with st.sidebar:
     
     st.divider()
     
-    # Developer Mode Toggle
-    dev_mode = st.checkbox("Developer Mode", value=False)
-    st.session_state["dev_mode"] = dev_mode
-    if dev_mode:
-        st.caption("🔧 Debug mode enabled")
+    # Developer Mode Toggle — only shown when BUILDWAY_DEV_MODE=true
+    if os.getenv("BUILDWAY_DEV_MODE", "false").lower() == "true":
+        dev_mode = st.checkbox("Developer Mode", value=False)
+        st.session_state["dev_mode"] = dev_mode
+        if dev_mode:
+            st.caption("🔧 Debug mode enabled")
+    else:
+        st.session_state.setdefault("dev_mode", False)
 
 # ──────────────────────────────────────────────
 # CRM AI helpers (Phase 0.4B) — defined at module level
@@ -668,8 +683,8 @@ elif page == L["nav_ai"]:
         "Client-owned API key is recommended to avoid mixed Token billing. "
         "Buildway-managed AI usage can be provided as a paid add-on."
     )
-    st.markdown(f"**Available Now:** {', '.join(AVAILABLE_PROVIDERS)}")
-    st.markdown(f"**Coming Soon:** {', '.join(COMING_SOON_PROVIDERS)}")
+    st.markdown(f"**目前支援：** {', '.join(AVAILABLE_PROVIDERS)}")
+    st.markdown(f"**即將支援：** {', '.join(COMING_SOON_PROVIDERS)}")
 
     # Provider selection (outside form so model list updates immediately)
     current_provider = st.session_state.get("ai_provider", PROVIDER_OPENAI)
@@ -941,14 +956,14 @@ elif page == L["nav_kb"]:
             with kb_col1:
                 st.metric(L["kb_total_chunks"], stats["total_chunks"])
             with kb_col2:
-                st.metric("Embedding Provider", stats["embedding_provider"].replace("Embedder", ""))
+                st.metric("嵌入模型", stats["embedding_provider"].replace("Embedder", ""))
             with kb_col3:
                 st.metric("狀態", L["kb_status_ready"] if stats["total_chunks"] > 0 else L["kb_status_empty"])
         except Exception as e:
-            st.error(f"Failed to load KB stats: {e}")
+            st.error(f"載入知識庫統計失敗：{e}")
     else:
-        st.error(f"RAG system not initialized: {st.session_state.get('rag_error', 'Unknown error')}")
-        st.info("Please check that chromadb and sentence-transformers are installed.")
+        st.error(f"RAG 系統未初始化：{st.session_state.get('rag_error', '未知錯誤')}")
+        st.info("請確認 chromadb 及 sentence-transformers 已安裝。")
     
     st.divider()
     
@@ -985,9 +1000,9 @@ elif page == L["nav_kb"]:
             failed_count = 0
             total_chunks = 0
 
-            with st.spinner("Indexing documents..."):
+            with st.spinner("索引文件中，請稍候..."):
                 for i, uploaded_file in enumerate(uploaded_files):
-                    status_text.text(f"Processing ({i+1}/{file_count}): {uploaded_file.name}")
+                    status_text.text(f"處理中 ({i+1}/{file_count})：{uploaded_file.name}")
                     try:
                         # Save to temp file
                         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
@@ -1029,19 +1044,19 @@ elif page == L["nav_kb"]:
             st.divider()
             sum_col1, sum_col2, sum_col3, sum_col4 = st.columns(4)
             with sum_col1:
-                st.metric("Total Files", file_count)
+                st.metric("文件總數", file_count)
             with sum_col2:
-                st.metric("Indexed", indexed_count)
+                st.metric("已索引", indexed_count)
             with sum_col3:
-                st.metric("Failed", failed_count)
+                st.metric("失敗", failed_count)
             with sum_col4:
-                st.metric("Chunks Added", total_chunks)
+                st.metric("新增 Chunks", total_chunks)
 
             if indexed_count > 0:
-                st.success(f"✅ Indexing complete — {indexed_count} file(s) indexed, {total_chunks} chunks added.")
+                st.success(f"✅ 索引完成 — 已索引 {indexed_count} 個文件，新增 {total_chunks} 個 chunks。")
                 st.rerun()
             else:
-                st.error("No files were indexed successfully.")
+                st.error("沒有文件成功建立索引。")
     
     st.divider()
     
@@ -1082,13 +1097,13 @@ elif page == L["nav_kb"]:
                 st.divider()
                 
                 # Clear all button
-                if st.button("Clear All Documents", type="secondary"):
-                    if st.button("Confirm Clear All", type="secondary", key="confirm_clear_all"):
+                if st.button("清除所有文件", type="secondary"):
+                    if st.button("確認清除全部", type="secondary", key="confirm_clear_all"):
                         st.session_state["rag_retriever"].clear_all()
-                        st.success("All documents cleared from vector database.")
+                        st.success("已清除向量資料庫中的所有文件。")
                         st.rerun()
         except Exception as e:
-            st.error(f"Failed to load documents: {e}")
+            st.error(f"載入文件列表失敗：{e}")
     
     st.divider()
     
@@ -1105,28 +1120,28 @@ elif page == L["nav_kb"]:
         if st.button(L["kb_search_btn"], key="kb_search_btn"):
             if search_query:
                 try:
-                    with st.spinner("Searching..."):
+                    with st.spinner("搜尋中..."):
                         results = st.session_state["rag_retriever"].search(search_query, top_k=top_k)
                     
                     if results:
-                        st.success(f"Found {len(results)} results")
+                        st.success(f"找到 {len(results)} 個結果")
                         for i, result in enumerate(results, 1):
                             filename = result['metadata'].get('file_name', 'unknown')
                             distance = result.get('distance', 0.0)
-                            with st.expander(f"Result {i} — {filename} (distance: {distance:.4f})"):
+                            with st.expander(f"結果 {i} — {filename} (距離：{distance:.4f})"):
                                 preview = result['text'][:500]
                                 if len(result['text']) > 500:
                                     preview += "..."
                                 st.write(preview)
-                                st.caption(f"Chunk index: {result['metadata'].get('chunk_index', 'N/A')}")
+                                st.caption(f"Chunk 編號：{result['metadata'].get('chunk_index', 'N/A')}")
                     else:
-                        st.info("No results found")
+                        st.info("未找到相關結果")
                 except Exception as e:
-                    st.error(f"Search failed: {e}")
+                    st.error(f"搜尋失敗：{e}")
             else:
-                st.warning("Please enter a search query")
+                st.warning("請輸入搜尋內容")
     else:
-        st.info("RAG system not initialized. Please check Knowledge Base setup.")
+        st.info("RAG 系統未初始化，請先到知識庫頁面完成設定。")
     
     st.divider()
     
@@ -1180,7 +1195,7 @@ elif page == L["nav_crm"]:
     with status_col1:
         st.metric(L["provider_label"], selected_config.provider)
     with status_col2:
-        st.metric(L["model_label"], selected_config.model or "Not set")
+        st.metric(L["model_label"], selected_config.model or "未設定")
     with status_col3:
         st.metric(L["connection_status"], selected_config.connection_status)
     if ai_connected:
@@ -1191,7 +1206,7 @@ elif page == L["nav_crm"]:
     elif selected_config.connection_status in {STATUS_COMING_SOON, STATUS_NOT_SUPPORTED}:
         st.info(CRM_PROVIDER_UNAVAILABLE_MESSAGE)
     elif selected_config.connection_status == STATUS_NOT_CONFIGURED:
-        st.warning("No AI model configured. Please complete AI Model Setup first.")
+        st.warning("尚未配置 AI 模型，請先前往「AI Model 設定」頁面完成設定。")
     else:
         st.warning(CONNECTION_REQUIRED_MESSAGE)
 
@@ -1227,7 +1242,7 @@ elif page == L["nav_crm"]:
 
     if generate_clicked:
         if not st.session_state["customer_message"].strip():
-            st.warning("Please enter a customer message before generating.")
+            st.warning("請先輸入客戶訊息再生成回覆。")
         else:
             selected_config = _sync_selected_ai_config(st.session_state.get("ai_provider", PROVIDER_OPENAI))
             if selected_config.connection_status == STATUS_CONNECTED:
@@ -1239,7 +1254,7 @@ elif page == L["nav_crm"]:
                         selected_config.endpoint_path,
                     )
                 )
-                with st.spinner("Generating AI draft..."):
+                with st.spinner("AI 正在生成回覆草稿..."):
                     try:
                         # Phase 0.5A: RAG retrieval with guardrails
                         kb_context = ""
@@ -1336,7 +1351,7 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
                             )
                             st.session_state["crm_kb_context_used"] = kb_used
                         else:
-                            st.error("AI returned an empty response. Please try again.")
+                            st.error("AI 回傳空白回覆，請再試一次。")
                     except Exception as e:
                         st.error(_format_ai_api_error(e))
             elif selected_config.connection_status in {STATUS_COMING_SOON, STATUS_NOT_SUPPORTED}:
@@ -1365,10 +1380,10 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
         action_col1, action_col2, action_col3, action_col4 = st.columns(4)
         with action_col1:
             src = st.session_state.get("crm_reply_source", "")
-            st.caption(f"Source: {src}" if src else "")
+            st.caption(f"來源：{src}" if src else "")
         with action_col2:
             kb_used = st.session_state.get("crm_kb_context_used", False)
-            st.caption(f"KB Context: {'Yes ✓' if kb_used else 'No'}")
+            st.caption(f"KB 內容：{'已使用 ✓' if kb_used else '未使用'}")
         with action_col3:
             confidence = st.session_state.get("crm_confidence", "N/A")
             confidence_emoji = {
@@ -1376,7 +1391,7 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
                 "MEDIUM": "🟡",
                 "LOW": "🔴"
             }.get(confidence, "⚪")
-            st.caption(f"Confidence: {confidence_emoji} {confidence}")
+            st.caption(f"信心評分：{confidence_emoji} {confidence}")
         with action_col4:
             if st.button(L["copy_reply"], use_container_width=True):
                 st.toast("已複製回覆（瀏覽器 clipboard 整合將在 Phase 0.5 推出）。")

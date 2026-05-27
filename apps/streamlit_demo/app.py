@@ -841,12 +841,12 @@ elif page == L["nav_ai"]:
     with c1:
         st.metric(L["ai_provider"], provider_config.provider)
     with c2:
-        st.metric(L["model_name"], provider_config.model or "Not set")
+        st.metric(L["model_name"], provider_config.model or "未設定")
     with c3:
         st.metric(L["connection_status"], provider_config.connection_status)
     if provider_requires_base_url(provider):
-        st.caption(f"Base URL: `{provider_config.base_url or 'Not set'}`")
-        st.caption(f"Endpoint Path: `{provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH}`")
+        st.caption(f"Base URL：`{provider_config.base_url or '未設定'}`")
+        st.caption(f"Endpoint 路徑：`{provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH}`")
 
 # ──────────────────────────────────────────────
 # Page: Database Setup
@@ -1215,7 +1215,7 @@ elif page == L["nav_crm"]:
         key="customer_message",
         height=200,
         label_visibility="collapsed",
-        placeholder="請貼上客戶訊息...",
+        placeholder="輸入客戶訊息內容...",
     )
 
     btn_col1, btn_col2 = st.columns([3, 1])

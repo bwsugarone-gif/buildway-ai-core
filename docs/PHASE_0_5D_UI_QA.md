@@ -1,6 +1,6 @@
 # PHASE 0.5D — Production UI Cleanup QA Notes
 
-**Date:** 2026-05-27  
+**Date:** 2026-05-27 (Final Blocker Fix)
 **Status:** Completed
 
 ---
@@ -15,15 +15,45 @@
 
 ### B. Developer Mode
 - Wrapped in `os.getenv("BUILDWAY_DEV_MODE", "false").lower() == "true"`
-- Default production: checkbox hidden, `dev_mode` defaults to `False`
-- Enable via: `export BUILDWAY_DEV_MODE=true` (or set in `.env`)
+- Production default: checkbox is NOT rendered; `dev_mode` is directly set to `False` (not `setdefault`)
+- Enable via: `BUILDWAY_DEV_MODE=true` environment variable
 
-### C. Traditional Chinese Localization
-Replaced all remaining hardcoded English labels:
-- AI Model page: `Available Now` → `目前支援`, `Coming Soon` → `即將支援`
-- KB page: `Embedding Provider` → `嵌入模型`, `Indexing documents` → `索引文件中`, `Total Files/Indexed/Failed/Chunks Added` → 中文, `Clear All Documents` → `清除所有文件`, `Search` results → 中文
-- CRM page: `Not set` → `未設定`, `No AI model configured` → 中文, `Generating AI draft` → `AI 正在生成回覆草稿`, `Source/KB Context/Confidence` captions → 中文, `empty response` error → 中文
-- CRM page: `Please enter a customer message` → 中文
+### C. Traditional Chinese Localization (Full)
+
+**LABELS dictionary (繁體中文):**
+- `db_hosted` → `"Buildway 託管"`
+- `db_client` → `"客戶現有資料庫 API"`
+
+**AI Model page:**
+- API key warning → 繁中
+- Client-owned key recommendation → 繁中
+- `Custom Model Name` / `Enter model name` → `自訂模型名稱` / `輸入模型名稱`
+- `Endpoint Path` → `Endpoint 路徑`
+- Error messages (Missing Base URL / API key / Model Name) → 繁中
+- Save success / caption → 繁中
+- Test connection spinner → 繁中
+
+**Database page:**
+- Warning message → 繁中
+- Radio label → 繁中
+- Hosted mode description → 繁中
+- Client mode description → 繁中
+- `Database Provider` selectbox → uses `L["db_provider"]`
+
+**Tenant page:**
+- Save success caption → 繁中
+
+**KB page:**
+- Embedding provider metric label → `嵌入模型`
+- Index progress / summary metrics → 繁中
+- Clear all button → 繁中
+- Search results → 繁中
+
+**CRM page:**
+- Model "Not set" → `未設定`
+- Spinner → 繁中
+- Warnings / errors → 繁中
+- Reply metadata captions (Source, KB Context, Confidence) → 繁中
 
 ### D. Cache Clear (One-time)
 ```python
@@ -35,31 +65,44 @@ if st.session_state.get("force_ui_refresh", True):
 Runs once per session on first load only.
 
 ### E. WhatsApp Demo
-- `inject_global_css()` added after `set_page_config()`
+- `inject_global_css()` applied after `set_page_config()`
 - `layout="centered"` preserved
-- All UI text already in Traditional Chinese
+- All UI text in Traditional Chinese
 
 ---
 
 ## Known Limitations
 
-### Fork / GitHub Icon (Top-right toolbar)
-The Streamlit `stToolbar` / `baseButton-headerNoPadding` CSS selectors reliably hide the **Deploy** button and **kebab menu (⋮)** in most Streamlit versions.
+### ⚠️ Fork / GitHub Badge (Streamlit Community Cloud)
 
-However, the **Fork** button and **GitHub icon** are injected by Streamlit Community Cloud's hosting layer as an overlay — these elements are rendered **outside the normal Streamlit DOM** and cannot be reliably hidden via CSS injected through `st.markdown()`.
+**Status: Cannot be fully hidden by app-level CSS.**
 
-**Workaround options (not implemented in this phase):**
-1. Use Streamlit's native `hide_streamlit_style` via `config.toml` — already set to `toolbarMode = "minimal"` in `.streamlit/config.toml`
-2. For full removal: deploy to a custom hosting environment (not Streamlit Community Cloud), or use Streamlit's enterprise/private deployment which allows full toolbar suppression
-3. Streamlit >= 1.28 introduced `st.set_page_config(menu_items={})` which can remove some menu items but not the Fork/GitHub badge from Community Cloud
+The Fork button and GitHub icon shown in the top-right corner of Streamlit Community Cloud deployments are **injected by the hosting layer as a DOM overlay**, outside the normal Streamlit app DOM. App-injected CSS via `st.markdown()` cannot reliably target or remove these elements.
 
-**Status:** CSS selectors applied as best-effort. Full suppression of Fork/GitHub Community Cloud badge requires infrastructure-level change.
+**What app CSS can hide:**
+- Deploy button (`.stDeployButton`)
+- Kebab menu (`button[kind="header"]`)
+- Toolbar (`[data-testid="stToolbar"]`)
+- Status widget (`[data-testid="stStatusWidget"]`)
+
+**What app CSS cannot hide:**
+- Streamlit Community Cloud Fork badge
+- GitHub repository link badge
+
+**Production recommendation:**
+To fully remove all Streamlit chrome including the Fork/GitHub badge, deploy to a self-hosted environment:
+- Google Cloud Run
+- Railway / Render / Fly.io
+- VPS / Docker
+- Any custom domain deployment
+
+These environments do not inject the Community Cloud hosting badge and allow full Streamlit chrome suppression via `config.toml` (`toolbarMode = "minimal"` or `"viewer"`).
 
 ---
 
 ## Syntax Check
 ```
-python -m py_compile apps/streamlit_demo/app.py       → PASSED
+python -m py_compile apps/streamlit_demo/app.py              → PASSED
 python -m py_compile apps/streamlit_demo/pages/whatsapp_demo.py → PASSED
 ```
 
@@ -68,6 +111,7 @@ python -m py_compile apps/streamlit_demo/pages/whatsapp_demo.py → PASSED
 ## Files Modified
 - `apps/streamlit_demo/app.py`
 - `apps/streamlit_demo/pages/whatsapp_demo.py`
+- `docs/PHASE_0_5D_UI_QA.md`
 
 ## Files NOT Modified (protected)
 - `core/rag/retriever.py`

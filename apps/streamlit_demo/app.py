@@ -140,8 +140,8 @@ LABELS = {
         "save_ai": "儲存 AI 設定",
         "test_connection": "測試連線",
         "db_mode": "資料庫模式",
-        "db_hosted": "Buildway Hosted",
-        "db_client": "自備資料庫 API",
+        "db_hosted": "Buildway 託管",
+        "db_client": "客戶現有資料庫 API",
         "db_provider": "資料庫供應商",
         "db_url": "資料庫 URL",
         "service_key": "API Key / Service Key",
@@ -377,7 +377,7 @@ with st.sidebar:
         if dev_mode:
             st.caption("🔧 Debug mode enabled")
     else:
-        st.session_state.setdefault("dev_mode", False)
+        st.session_state["dev_mode"] = False
 
 # ──────────────────────────────────────────────
 # CRM AI helpers (Phase 0.4B) — defined at module level
@@ -665,7 +665,7 @@ elif page == L["nav_tenant"]:
 
     if save_tenant:
         st.success(f"{L['save_profile']}: **{company_name}** | {industry} | {default_channel}")
-        st.caption("In production, stored in tenants table with unique tenant_id.")
+        st.caption("正式版將以唯一 tenant_id 儲存至 tenants 資料表。")
 
 # ──────────────────────────────────────────────
 # Page: AI Model Setup
@@ -675,13 +675,12 @@ elif page == L["nav_ai"]:
     st.title(L["nav_ai"])
 
     st.warning(
-        "API keys are stored in session memory only. "
-        "Keys are never written to disk, logged, or committed. "
-        "Session is cleared when the browser tab is closed."
+        "API 金鑰只儲存於瀏覽器 session，不寫入磁碟、不記錄、不提交至版本庫。"
+        "關閉瀏覽器分頁後 session 將自動清除。"
     )
     st.info(
-        "Client-owned API key is recommended to avoid mixed Token billing. "
-        "Buildway-managed AI usage can be provided as a paid add-on."
+        "建議使用客戶自備 API 金鑰，避免 Token 費用混用。"
+        "如需 Buildway 代管 AI 用量，可作為付費附加服務提供。"
     )
     st.markdown(f"**目前支援：** {', '.join(AVAILABLE_PROVIDERS)}")
     st.markdown(f"**即將支援：** {', '.join(COMING_SOON_PROVIDERS)}")
@@ -720,9 +719,9 @@ elif page == L["nav_ai"]:
         custom_model_name = ""
         if model_name == "custom":
             custom_model_name = st.text_input(
-                "Custom Model Name",
+                "自訂模型名稱",
                 value=raw_provider_config.get("custom_model", ""),
-                placeholder="Enter model name",
+                placeholder="輸入模型名稱",
                 disabled=not provider_available,
             )
         base_url_input = ""
@@ -735,7 +734,7 @@ elif page == L["nav_ai"]:
                 placeholder="https://api.example.com/v1",
             )
             endpoint_path_input = st.text_input(
-                "Endpoint Path",
+                "Endpoint 路徑",
                 value=provider_config.endpoint_path or DEFAULT_OPENAI_COMPATIBLE_ENDPOINT_PATH,
                 placeholder="/chat/completions",
             )
@@ -761,7 +760,7 @@ elif page == L["nav_ai"]:
     if save_ai or test_ai:
         config_error = False
         if provider_requires_base_url(provider) and not next_base_url:
-            st.error("Missing Base URL")
+            st.error("缺少 Base URL，請填寫後再儲存。")
             config_error = True
         elif provider_requires_base_url(provider):
             try:
@@ -773,9 +772,9 @@ elif page == L["nav_ai"]:
         if config_error:
             pass
         elif not next_api_key:
-            st.error("Missing API key")
+            st.error("缺少 API 金鑰，請輸入後再儲存。")
         elif not resolved_model:
-            st.error("Missing Model Name")
+            st.error("缺少模型名稱，請選擇或輸入模型後再儲存。")
         else:
             st.session_state["ai_provider_configs"][provider] = {
                 "provider": provider,
@@ -789,8 +788,8 @@ elif page == L["nav_ai"]:
             }
             provider_config = _sync_selected_ai_config(provider)
             if save_ai:
-                st.success(f"{provider} configured - model: `{resolved_model}`")
-                st.caption("Run Test Connection before using this provider in CRM.")
+                st.success(f"✅ {provider} 已設定 — 模型：`{resolved_model}`")
+                st.caption("請點擊「測試連線」確認 API 金鑰有效後再前往 CRM 使用。")
 
     if test_ai and provider_config.configured:
         debug = build_ai_request_debug(
@@ -801,7 +800,7 @@ elif page == L["nav_ai"]:
         )
         _show_ai_debug(debug)
         validation_result = validate_config(provider_config)
-        with st.spinner("Testing AI provider connection..."):
+        with st.spinner("正在測試 AI 供應商連線..."):
             if validation_result:
                 result = validation_result
             else:
@@ -856,13 +855,12 @@ elif page == L["nav_db"]:
     st.title(L["nav_db"])
 
     st.warning(
-        "API keys are not stored in this demo version. "
-        "Production version will store encrypted keys in a secure backend."
+        "Demo 版本不儲存 API 金鑰。正式版將以加密方式儲存於安全後端。"
     )
 
     st.subheader(L["db_mode"])
     db_mode = st.radio(
-        "Choose database mode:",
+        "選擇資料庫模式：",
         [L["db_hosted"], L["db_client"]],
         index=0,
         label_visibility="collapsed",
@@ -870,20 +868,20 @@ elif page == L["nav_db"]:
 
     if db_mode == L["db_hosted"]:
         st.info(
-            f"**{L['db_hosted']}** — No external Database is required from client. "
-            "Database / Vector DB / storage are provided under Buildway SaaS plan."
+            f"**{L['db_hosted']}** — 客戶無需準備外部資料庫。"
+            "資料庫、向量資料庫及存儲空間均由 Buildway SaaS 方案提供。"
         )
-        st.caption("Cost responsibility: included in monthly SaaS plan / subject to quota.")
+        st.caption("費用責任：已包含於每月 SaaS 方案配額內。")
         st.markdown(
-            "> Client does not need to prepare a database server. "
-            "Client still needs to prepare business data such as FAQ, product catalog and reply templates."
+            "> 客戶無需自備資料庫伺服器。"
+            "客戶仍需自備業務資料，例如 FAQ、產品目錄及回覆範本。"
         )
     else:
-        st.caption("Connect your existing Database API.")
+        st.caption("連接您的現有資料庫 API。")
 
         with st.form("db_form"):
             db_provider = st.selectbox(
-                "Database Provider",
+                L["db_provider"],
                 ["Supabase", "PostgreSQL", "Firebase", "Custom REST API"],
             )
             db_url = st.text_input(

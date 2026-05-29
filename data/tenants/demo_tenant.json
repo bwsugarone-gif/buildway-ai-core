@@ -1,0 +1,11 @@
+{
+  "tenant_id": "demo_tenant",
+  "company_name": "Demo Trading Company",
+  "industry": "Foreign Trade",
+  "default_language": "繁體中文",
+  "reply_tone": "專業友善",
+  "ai_provider": "OpenAI",
+  "kb_collection_name": "demo_tenant_kb",
+  "human_review_threshold": 0.65,
+  "auto_reply_allowed": false
+}

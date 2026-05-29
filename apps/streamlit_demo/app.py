@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 
 from core.qa.status import load_qa_status
+from core.tenant.profile_store import load_profile as load_tenant_profile_json
+from core.tenant.profile_store import save_profile as save_tenant_profile_json
 from core.agents.provider_router import (
     AIProviderConfig,
     AVAILABLE_PROVIDERS,
@@ -675,17 +677,57 @@ Buildway integrates the Webhook and workflow.
 # ──────────────────────────────────────────────
 elif page == L["nav_tenant"]:
     st.title(L["nav_tenant"])
+    tenant_profile = load_tenant_profile_json()
 
     with st.form("tenant_form"):
-        company_name = st.text_input(L["company_name"], value="Demo Trading Company")
-        industry = st.text_input(L["industry"], value="Foreign Trade")
-        contact_email = st.text_input(L["contact_email"], value="admin@example.com")
-        default_channel = st.selectbox(L["channel"], ["WhatsApp", "Email", "Web Chat"], index=0)
+        company_name = st.text_input("公司名稱", value=tenant_profile.get("company_name", ""))
+        industry = st.text_input("行業", value=tenant_profile.get("industry", ""))
+        language_options = ["繁體中文", "English", "中英混合"]
+        default_language = st.selectbox(
+            "預設語言",
+            language_options,
+            index=language_options.index(tenant_profile.get("default_language", "繁體中文"))
+            if tenant_profile.get("default_language", "繁體中文") in language_options
+            else 0,
+        )
+        tone_options = ["專業友善", "簡潔直接", "正式", "親切"]
+        reply_tone = st.selectbox(
+            "回覆語氣",
+            tone_options,
+            index=tone_options.index(tenant_profile.get("reply_tone", "專業友善"))
+            if tenant_profile.get("reply_tone", "專業友善") in tone_options
+            else 0,
+        )
+        human_review_threshold = st.slider(
+            "Human Review Threshold（人工審批門檻）",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(tenant_profile.get("human_review_threshold", 0.65)),
+            step=0.05,
+        )
+        auto_reply_allowed = st.checkbox(
+            "Auto Reply Allowed（允許自動回覆）",
+            value=bool(tenant_profile.get("auto_reply_allowed", False)),
+        )
         save_tenant = st.form_submit_button(L["save_profile"])
 
     if save_tenant:
-        st.success(f"{L['save_profile']}: **{company_name}** | {industry} | {default_channel}")
-        st.caption("正式版將以唯一 tenant_id 儲存至 tenants 資料表。")
+        saved_profile = save_tenant_profile_json(
+            {
+                "company_name": company_name,
+                "industry": industry,
+                "default_language": default_language,
+                "reply_tone": reply_tone,
+                "human_review_threshold": human_review_threshold,
+                "auto_reply_allowed": auto_reply_allowed,
+            }
+        )
+        st.success(f"已儲存 Tenant Profile：**{saved_profile['company_name']}**")
+        st.caption("設定已儲存到 data/tenants/demo_tenant.json。")
+
+    if st.session_state.get("dev_mode", False):
+        with st.expander("Developer Debug：目前 Tenant JSON", expanded=False):
+            st.json(load_tenant_profile_json())
 
 # ──────────────────────────────────────────────
 # Page: AI Model Setup

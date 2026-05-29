@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 
 from core.qa.status import load_qa_status
+from core.approval.queue import enqueue_approval_item, list_approval_queue, needs_human_review
 from core.memory.customer_memory import list_customer_history, save_customer_interaction
 from core.tenant.profile_store import load_profile as load_tenant_profile_json
 from core.tenant.profile_store import save_profile as save_tenant_profile_json
@@ -125,6 +126,7 @@ LABELS = {
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
         "nav_qa": "QA 狀態",
+        "nav_approval": "人工審批",
         "nav_logs": "使用記錄",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -201,6 +203,7 @@ LABELS = {
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
         "nav_qa": "QA 狀態",
+        "nav_approval": "人工審批",
         "nav_logs": "使用记录",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -274,6 +277,7 @@ LABELS = {
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM Demo",
         "nav_qa": "QA 狀態",
+        "nav_approval": "人工審批",
         "nav_logs": "Usage Logs",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -370,6 +374,7 @@ with st.sidebar:
             L["nav_kb"],
             L["nav_crm"],
             L["nav_qa"],
+            L["nav_approval"],
             L["nav_logs"],
         ],
         label_visibility="collapsed",
@@ -1427,6 +1432,23 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
                                 kb_used=kb_used,
                                 provider=selected_config.provider,
                             )
+                            needs_review, review_reason = needs_human_review(
+                                customer_message=st.session_state["customer_message"],
+                                confidence=confidence_level,
+                                kb_used=kb_used,
+                                conflict_warning=conflict_warning,
+                            )
+                            if needs_review:
+                                enqueue_approval_item(
+                                    tenant_id=tenant_profile.get("tenant_id", "demo_tenant"),
+                                    customer_ref=customer_ref,
+                                    customer_message=st.session_state["customer_message"],
+                                    draft_reply=reply,
+                                    confidence=confidence_level,
+                                    reason=review_reason,
+                                    provider=selected_config.provider,
+                                )
+                                st.warning("此回覆已標記為 Needs Human Review，請到人工審批頁查看。")
                         else:
                             st.error("AI 回傳空白回覆，請再試一次。")
                     except Exception as e:
@@ -1581,11 +1603,46 @@ elif page == L["nav_qa"]:
     st.title("QA 狀態")
     _render_qa_status_panel()
     st.divider()
-    st.subheader("QA Checklist")
+    st.subheader("QA Checklist（測試清單）")
     qa_status = load_qa_status()
     for item in qa_status.get("checklist", []):
         st.checkbox(item, value=False, disabled=True)
     st.info("Phase 0.6 已建立 QA checklist。請在測試後更新 data/qa_status.json。")
+
+# ──────────────────────────────────────────────
+# Page: Approval Queue
+elif page == L["nav_approval"]:
+    st.title("人工審批佇列")
+    approval_items = list_approval_queue()
+    if not approval_items:
+        st.info("目前沒有待審批回覆。")
+    for item in approval_items:
+        with st.container(border=True):
+            st.markdown(f"**{item.get('status', 'Needs Human Review')}**")
+            st.caption(
+                f"{item.get('created_at', '')} | 客戶：{item.get('customer_ref', '')} | "
+                f"信心：{item.get('confidence', 'N/A')}"
+            )
+            st.text_area(
+                "客戶訊息",
+                value=item.get("customer_message", ""),
+                height=90,
+                disabled=True,
+                key=f"approval_msg_{item.get('approval_id')}",
+            )
+            st.text_area(
+                "AI 草稿回覆",
+                value=item.get("draft_reply", ""),
+                height=140,
+                disabled=True,
+                key=f"approval_reply_{item.get('approval_id')}",
+            )
+            st.caption("原因：" + "、".join(item.get("reason", [])))
+            approve_col, reject_col = st.columns(2)
+            with approve_col:
+                st.button("批准（佔位）", disabled=True, key=f"approve_{item.get('approval_id')}")
+            with reject_col:
+                st.button("拒絕（佔位）", disabled=True, key=f"reject_{item.get('approval_id')}")
 
 # ──────────────────────────────────────────────
 # Page: Usage Logs

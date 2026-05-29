@@ -1,0 +1,16 @@
+{
+  "last_run": "",
+  "passed_count": 0,
+  "failed_count": 0,
+  "notes": "Phase 0.6 checklist 已建立，待本地測試或人工 QA 更新。",
+  "checklist": [
+    "Out-of-KB 問題",
+    "垃圾輸入",
+    "假資料誘導",
+    "價格陷阱",
+    "Shipping trap",
+    "中文問題",
+    "中英混合",
+    "WhatsApp demo flow"
+  ]
+}

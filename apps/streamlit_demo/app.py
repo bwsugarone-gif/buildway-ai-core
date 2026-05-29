@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 
+from core.qa.status import load_qa_status
 from core.agents.provider_router import (
     AIProviderConfig,
     AVAILABLE_PROVIDERS,
@@ -120,6 +121,7 @@ LABELS = {
         "nav_db": "Database 設定",
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
+        "nav_qa": "QA 狀態",
         "nav_logs": "使用記錄",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -195,6 +197,7 @@ LABELS = {
         "nav_db": "Database 设置",
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM",
+        "nav_qa": "QA 狀態",
         "nav_logs": "使用记录",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -267,6 +270,7 @@ LABELS = {
         "nav_db": "Database Setup",
         "nav_kb": "Knowledge Base",
         "nav_crm": "CRM Demo",
+        "nav_qa": "QA 狀態",
         "nav_logs": "Usage Logs",
         "login_title": "Client Login Portal",
         "login_email": "Email",
@@ -362,6 +366,7 @@ with st.sidebar:
             L["nav_db"],
             L["nav_kb"],
             L["nav_crm"],
+            L["nav_qa"],
             L["nav_logs"],
         ],
         label_visibility="collapsed",
@@ -530,6 +535,19 @@ def _calculate_confidence_fallback(results: list) -> str:
         return "LOW"
 
 
+def _render_qa_status_panel() -> None:
+    qa_status = load_qa_status()
+    st.subheader("QA 狀態")
+    qa_col1, qa_col2, qa_col3 = st.columns(3)
+    with qa_col1:
+        st.metric("最後 QA 執行", qa_status.get("last_run") or "未執行")
+    with qa_col2:
+        st.metric("通過數量", qa_status.get("passed_count", 0))
+    with qa_col3:
+        st.metric("失敗數量", qa_status.get("failed_count", 0))
+    st.caption(f"備註：{qa_status.get('notes', '')}")
+
+
 # ──────────────────────────────────────────────
 # Page: Home
 # ──────────────────────────────────────────────
@@ -537,6 +555,8 @@ if page == L["nav_home"]:
     st.title("Buildway AI Core")
     st.caption("Buildway Tech (HK) Limited — 多行業 AI SaaS 平台，讓企業用自己的資料驅動 AI 回覆。")
 
+    st.divider()
+    _render_qa_status_panel()
     st.divider()
 
     # 3 entry cards
@@ -1475,6 +1495,18 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
                 f"Would save: customer_ref=`{customer_ref}`, "
                 f"message=`{customer_message_save}`"
             )
+
+# ──────────────────────────────────────────────
+# Page: QA Status
+elif page == L["nav_qa"]:
+    st.title("QA 狀態")
+    _render_qa_status_panel()
+    st.divider()
+    st.subheader("QA Checklist")
+    qa_status = load_qa_status()
+    for item in qa_status.get("checklist", []):
+        st.checkbox(item, value=False, disabled=True)
+    st.info("Phase 0.6 已建立 QA checklist。請在測試後更新 data/qa_status.json。")
 
 # ──────────────────────────────────────────────
 # Page: Usage Logs

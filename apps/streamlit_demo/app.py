@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 
 from core.qa.status import load_qa_status
+from core.memory.customer_memory import list_customer_history, save_customer_interaction
 from core.tenant.profile_store import load_profile as load_tenant_profile_json
 from core.tenant.profile_store import save_profile as save_tenant_profile_json
 from core.agents.provider_router import (
@@ -1272,6 +1273,13 @@ elif page == L["nav_crm"]:
 
     # ── Customer message input ────────────────────
     st.subheader(L["customer_message"])
+    tenant_profile = load_tenant_profile_json()
+    customer_ref = st.text_input(
+        "客戶編號",
+        value=st.session_state.get("crm_customer_ref", "CUST-001"),
+        key="crm_customer_ref_input",
+    )
+    st.session_state["crm_customer_ref"] = customer_ref
     customer_input = st.text_area(
         L["customer_message"],
         key="customer_message",
@@ -1410,6 +1418,15 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
                                 selected_config.provider, f"{selected_config.provider} API"
                             )
                             st.session_state["crm_kb_context_used"] = kb_used
+                            save_customer_interaction(
+                                tenant_id=tenant_profile.get("tenant_id", "demo_tenant"),
+                                customer_ref=customer_ref,
+                                customer_message=st.session_state["customer_message"],
+                                ai_reply=reply,
+                                confidence=confidence_level,
+                                kb_used=kb_used,
+                                provider=selected_config.provider,
+                            )
                         else:
                             st.error("AI 回傳空白回覆，請再試一次。")
                     except Exception as e:
@@ -1493,14 +1510,34 @@ If the answer is not in the knowledge base, say so and ask for clarification."""
 
     # ── Customer memory panel ─────────────────────
     st.subheader(L["customer_memory"])
+    history = list_customer_history(
+        tenant_profile.get("tenant_id", "demo_tenant"),
+        st.session_state.get("crm_customer_ref", "CUST-001"),
+    )
     mem_col1, mem_col2, mem_col3 = st.columns(3)
     with mem_col1:
-        st.text_area("客戶摘要", value="（尚未連線）", height=80, disabled=True)
+        st.metric("互動次數", len(history))
     with mem_col2:
-        st.text_area("上次查詢", value="（尚未連線）", height=80, disabled=True)
+        st.text_area(
+            "上次查詢",
+            value=history[0]["customer_message"] if history else "（未有記錄）",
+            height=80,
+            disabled=True,
+        )
     with mem_col3:
-        st.text_area("跟進狀態", value="（尚未連線）", height=80, disabled=True)
-    st.caption("Phase 1 將按 tenant_id 儲存至 Supabase。")
+        st.text_area(
+            "上次 AI 回覆",
+            value=history[0]["ai_reply"] if history else "（未有記錄）",
+            height=80,
+            disabled=True,
+        )
+    if history:
+        with st.expander("最近互動記錄", expanded=False):
+            for item in history[:5]:
+                st.markdown(f"**{item.get('timestamp', '')} | {item.get('confidence', 'N/A')} | {item.get('provider', '')}**")
+                st.write(item.get("customer_message", ""))
+                st.caption(item.get("ai_reply", ""))
+    st.caption("記憶已按 tenant_id 與 customer_ref 儲存到本地 JSON。")
 
     st.divider()
 

@@ -402,6 +402,14 @@ def _render_typing_indicator() -> str:
 </div>"""
 
 
+def _safe_page_link(page: str, label: str, icon: str) -> None:
+    """Render a page link, with a testing fallback when page metadata is absent."""
+    try:
+        st.page_link(page, label=label, icon=icon)
+    except Exception:
+        st.caption(label)
+
+
 # ──────────────────────────────────────────────
 # Session state init (wa_ namespace only)
 # ──────────────────────────────────────────────
@@ -430,9 +438,9 @@ title_col, nav_col1, nav_col2 = st.columns([3, 1, 1])
 with title_col:
     st.markdown("## 💬 WhatsApp CRM 示範")
 with nav_col1:
-    st.page_link("app.py", label="返回主頁 / CRM", icon="🏠")
+    _safe_page_link("app.py", label="返回主頁 / CRM", icon="🏠")
 with nav_col2:
-    st.page_link("app.py", label="返回主頁 / Knowledge Base", icon="📚")
+    _safe_page_link("app.py", label="返回主頁 / Knowledge Base", icon="📚")
 
 # ──────────────────────────────────────────────
 # Status banners
